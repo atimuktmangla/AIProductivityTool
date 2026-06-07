@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
 import express from 'express';
 import { metricsRouter } from '../../WEB/routes/metricsRouter.js';
 import { errorHandler } from '../../WEB/middleware/errorHandler.js';
@@ -93,6 +94,8 @@ function setupHappyPath() {
 describe('POST /api/dashboard/metrics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetForTesting();
+    initInMemoryDb();
   });
 
   // @req REQ-4.4.1-1 REQ-4.4.2-1 REQ-4.4.3-1

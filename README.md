@@ -15,6 +15,7 @@ Internal engineering dashboard that pulls live data from on-premises **Jira Serv
 - AI-generated team insights summary
 - **Background sync job** — schedule daily/weekly automatic data sync for your team; reports load from per-developer JSON cache in sub-seconds
 - **Sync Jobs admin UI** — configure users, schedule, and trigger syncs; monitor per-run and per-batch logs
+- **Spec-driven metrics** (opt-in) — phased lead times, spec regression detection, clarification delay, and first-pass yield derived from the Jira changelog
 
 ---
 
@@ -32,6 +33,19 @@ Internal engineering dashboard that pulls live data from on-premises **Jira Serv
 
 > **Leave adjustment:** All time metrics are discounted by 12.6% to account for 2.75 leave/holiday days per resource per month (33 days ÷ 261 workdays/year).
 
+### Spec-driven metrics (when `SPEC_METRICS_ENABLED=true`)
+
+| Metric                      | Description                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Spec Definition Time**    | Working hours from ticket created to spec-approved status transition                           |
+| **Implementation Time**     | Working hours from spec approved to PR merged (pure coding + review)                           |
+| **Verification Time**       | Working hours from verification entry to ticket done                                           |
+| **Clarification Delay**     | Cumulative working hours the ticket spent in a Blocked/Awaiting-Clarification status           |
+| **Spec Regressions**        | Count of times a ticket moved back from Verification to In Progress (spec was missed)          |
+| **Post-merge Rework**       | Commit messages after merge containing spec-churn keywords (`fix spec`, `per feedback`, etc.)  |
+| **First-pass Yield (FPY)**  | `true` when zero regressions and zero post-merge rework — the implementation matched the spec  |
+| **Spec Adherence Score**    | 0–100 composite: exponential penalty per regression + linear penalty per rework commit         |
+
 ---
 
 ## Architecture
@@ -48,7 +62,7 @@ AIProductivityTool/
 │   └── guardrails/           # rateLimiter, sanitiser
 ├── BL/                     # Business logic — metric computation & config
 │   ├── config/env.ts       # Env validation & typed AppConfig
-│   ├── metrics/            # cycleTime, reviewDepth, workType, aggregator
+│   ├── metrics/            # cycleTime, reviewDepth, workType, codeQuality, specMetrics, aggregator
 │   └── evals/              # metricsValidator — sanity checks on output
 ├── DB/                     # Data access — Atlassian API clients & caching
 │   ├── client/             # Axios instance factory (SSL bypass for on-prem)
@@ -189,10 +203,17 @@ The `api` service uses the `.env` file in the repo root. The `ui` service talks 
 | `BOT_USER_PATTERN`        | No       | `sonarqube\|jenkins\|...` | Regex to exclude bot accounts from review metrics                        |
 | `STALE_PR_THRESHOLD_DAYS` | No       | `3`                       | Open PRs older than this many business days are flagged                  |
 | `PORT`                    | No       | `3000`                    | Backend HTTP port                                                        |
-| `SYNC_DEVELOPER_IDS`      | No       | —                         | Comma-separated default user IDs for the background sync job             |
-| `SYNC_INTERVAL_MINUTES`   | No       | `0`                       | Default sync interval: `1440` = daily, `10080` = weekly, `0` = off       |
+| `SYNC_DEVELOPER_IDS`        | No       | —                         | Comma-separated default user IDs for the background sync job             |
+| `SYNC_INTERVAL_MINUTES`     | No       | `0`                       | Default sync interval: `1440` = daily, `10080` = weekly, `0` = off       |
+| `SPEC_METRICS_ENABLED`      | No       | `false`                   | Enable spec-driven metrics (phased lead time, regressions, FPY)          |
+| `SPEC_APPROVED_STATUS`      | No       | `Spec Approved`           | Jira status name marking a spec as locked (case-insensitive)             |
+| `SPEC_VERIFICATION_STATUS`  | No       | `Verification`            | Jira status name marking QA / verification entry (case-insensitive)      |
+| `SPEC_DONE_STATUS`          | No       | `Done`                    | Jira status name marking ticket completion (case-insensitive)            |
+| `SPEC_BLOCKED_STATUS`       | No       | `Blocked`                 | Jira status name meaning blocked / awaiting clarification (case-insensitive) |
 
 > `SYNC_DEVELOPER_IDS` and `SYNC_INTERVAL_MINUTES` are the env-var fallbacks. Once you save a schedule via the Sync Jobs UI, `data/sync-config.json` takes precedence and the env vars are ignored.
+
+> Spec status names must match your Jira workflow exactly. The comparison is case-insensitive. If the status is never reached in a ticket's lifecycle, the corresponding time phase is recorded as 0.
 
 **PAT setup:** Jira — **Profile → Personal Access Tokens**. Bitbucket — **Account → Personal Access Tokens**.
 
@@ -285,6 +306,21 @@ Returns aggregated developer metrics. All requests require `X-Api-Key` header.
 `repoTargets`, `projectKeys`, `compareStartDate`, `compareEndDate` are all optional.
 
 **Response:** `{ current: AggregatedDeveloperMetric[], previous?: AggregatedDeveloperMetric[] }`
+
+When `SPEC_METRICS_ENABLED=true`, each `AggregatedDeveloperMetric` includes a `specMetrics` field:
+
+```json
+"specMetrics": {
+  "specDefinitionTimeHrs": 3.2,
+  "implementationTimeHrs": 12.4,
+  "verificationTimeHrs": 4.1,
+  "clarificationDelayHrs": 1.5,
+  "specRegressions": 1,
+  "postMergeReworkCommits": 0,
+  "firstPassYield": false,
+  "specAdherenceScore": 50
+}
+```
 
 ### `POST /api/dashboard/insights`
 
@@ -399,6 +435,7 @@ Both must pass with zero errors before opening a PR.
 | [docs/api-usecases.md](docs/api-usecases.md)                             | Concrete API request examples for all repo-targeting scenarios |
 | [docs/repo-resolution-flowcharts.md](docs/repo-resolution-flowcharts.md) | Decision flowcharts for the repo resolution tiers              |
 | [docs/JQL_EXAMPLES.md](docs/JQL_EXAMPLES.md)                             | JQL query library for Jira                                     |
+| [DASHBOARD_DOCUMENTATION.md](DASHBOARD_DOCUMENTATION.md)                 | Full widget-by-widget user guide for engineering managers      |
 
 ---
 

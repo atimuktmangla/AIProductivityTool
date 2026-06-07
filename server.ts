@@ -14,8 +14,18 @@ import { pingJira } from './DB/services/jiraService.js';
 import { pingBitbucket } from './DB/services/bitbucketService.js';
 import { evictOldCacheMonths } from './DB/cache/cacheEviction.js';
 import { startMetricsSyncJob } from './jobs/metricsSync.js';
+import { initInMemoryDb } from './DB/store/inMemoryDb.js';
+import { runMigrationCleanup } from './DB/store/migrationCleanup.js';
 
 const config = getConfig();
+
+// Fail fast if the in-memory store cannot be initialised (REQ-4.12-1 / SC-007)
+try {
+  initInMemoryDb();
+} catch (err) {
+  console.error('[store] failed to initialise in-memory database:', err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
 const app = express();
 
@@ -56,6 +66,10 @@ app.use(errorHandler);
 
 evictOldCacheMonths(config.cacheDir, config.cacheRetentionMonths).catch((err) => {
   console.warn('[cache] eviction failed on startup:', err);
+});
+
+runMigrationCleanup().catch((err) => {
+  console.warn('[migration] cleanup error on startup:', err);
 });
 
 startMetricsSyncJob().catch((err) => {

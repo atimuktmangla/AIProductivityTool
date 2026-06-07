@@ -27,7 +27,7 @@ function act(action: RawActivity['action'], user: string, offsetMs = 0): RawActi
 // ── REQ-4.4.7: Review depth ───────────────────────────────────────────────────
 
 describe('computeReviewDepth', () => {
-  // @req REQ-4.4.7-1
+  // @req REQ-4.4.7-1 REQ-4.4.8-1
   it('counts COMMENTED, REVIEWED, APPROVED from non-author non-bot users', () => {
     const activities = [
       act('COMMENTED', 'alice', 1000),

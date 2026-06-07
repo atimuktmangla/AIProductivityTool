@@ -44,34 +44,34 @@ function makePR(overrides: Partial<PRQualityInput> = {}): PRQualityInput {
 // ── Signal 1: Critical resolution score ──────────────────────────────────────
 
 describe('signal 1 — critical resolution', () => {
-  // @req REQ-4.4.8-2
+  // @req REQ-4.4.9-2
   it('no issues → criticalScore = null (signal excluded from composite)', () => {
     const result = computeCodeQuality([], [], AUTHOR);
     expect(result.criticalScore).toBeNull();
   });
 
-  // @req REQ-4.4.8-1
+  // @req REQ-4.4.9-1
   it('all regular issues resolved → criticalScore = 100', () => {
     const issues = [makeIssue('Bug'), makeIssue('Story')];
     const result = computeCodeQuality(issues, [], AUTHOR);
     expect(result.criticalScore).toBe(100);
   });
 
-  // @req REQ-4.4.8-1
+  // @req REQ-4.4.9-1
   it('unresolved issues → criticalScore < 100', () => {
     const issues = [makeIssue('Bug', [], false), makeIssue('Story', [], true)];
     const result = computeCodeQuality(issues, [], AUTHOR);
     expect(result.criticalScore).toBeLessThan(100);
   });
 
-  // @req REQ-4.4.8-3
+  // @req REQ-4.4.9-3
   it('BlackDuck label resolved → criticalScore = 100 (2.5× multiplier fills denominator)', () => {
     const issues = [makeIssue('Bug', ['blackduck'], true)];
     const result = computeCodeQuality(issues, [], AUTHOR);
     expect(result.criticalScore).toBe(100);
   });
 
-  // @req REQ-4.4.8-3
+  // @req REQ-4.4.9-3
   it('critical issue unresolved → score lower than same regular issue unresolved', () => {
     const regular  = computeCodeQuality([makeIssue('Bug', [], false)], [], AUTHOR);
     const critical = computeCodeQuality([makeIssue('Bug', ['blackduck'], false)], [], AUTHOR);
@@ -85,12 +85,12 @@ describe('signal 1 — critical resolution', () => {
 describe('signal 2 — approval rate', () => {
   const PR_CREATED = NOW - 12 * 3600_000; // 12 h ago
 
-  // @req REQ-4.4.8-2
+  // @req REQ-4.4.9-2
   it('no PRs → approvalScore = null (signal excluded from composite)', () => {
     expect(computeCodeQuality([], [], AUTHOR).approvalScore).toBeNull();
   });
 
-  // @req REQ-4.4.8-4
+  // @req REQ-4.4.9-4
   it('human approval within 24 h with comment → full credit (100)', () => {
     const approvedAt = PR_CREATED + 2 * 3600_000; // 2 h after creation
     const pr = makePR({
@@ -104,7 +104,7 @@ describe('signal 2 — approval rate', () => {
     expect(result.approvalScore).toBe(100);
   });
 
-  // @req REQ-4.4.8-4
+  // @req REQ-4.4.9-4
   it('approval under 5 min with no comment → rubber stamp → 50 credit', () => {
     const approvedAt = PR_CREATED + 3 * 60_000; // 3 min after creation
     const pr = makePR({
@@ -115,7 +115,7 @@ describe('signal 2 — approval rate', () => {
     expect(result.approvalScore).toBe(50);
   });
 
-  // @req REQ-4.4.8-4
+  // @req REQ-4.4.9-4
   it('approval outside 24 h SLA → zero credit', () => {
     const approvedAt = PR_CREATED + 30 * 3600_000; // 30 h after creation
     const pr = makePR({
@@ -126,7 +126,7 @@ describe('signal 2 — approval rate', () => {
     expect(result.approvalScore).toBe(0);
   });
 
-  // @req REQ-4.4.8-5
+  // @req REQ-4.4.9-5
   it('bot approval excluded', () => {
     const approvedAt = PR_CREATED + 2 * 3600_000;
     const pr = makePR({
@@ -136,7 +136,7 @@ describe('signal 2 — approval rate', () => {
     expect(computeCodeQuality([], [pr], AUTHOR).approvalScore).toBe(0);
   });
 
-  // @req REQ-4.4.8-5
+  // @req REQ-4.4.9-5
   it('author self-approval excluded', () => {
     const approvedAt = PR_CREATED + 2 * 3600_000;
     const pr = makePR({
@@ -154,34 +154,34 @@ describe('signal 3 — PR focus sigmoid', () => {
     return computeCodeQuality([], [makePR({ linesChanged: lines })], AUTHOR).prFocusScore;
   }
 
-  // @req REQ-4.4.8-6
+  // @req REQ-4.4.9-6
   it('0 lines → near 100 (sigmoid plateau)', () => {
     expect(score(0)).toBeGreaterThanOrEqual(93);
   });
 
-  // @req REQ-4.4.8-6
+  // @req REQ-4.4.9-6
   it('200 lines → ≥93 (sigmoid plateau)', () => {
     expect(score(200)).toBeGreaterThanOrEqual(93);
   });
 
-  // @req REQ-4.4.8-6
+  // @req REQ-4.4.9-6
   it('500 lines → ~50 (midpoint)', () => {
     expect(score(500)).toBe(50);
   });
 
-  // @req REQ-4.4.8-6
+  // @req REQ-4.4.9-6
   it('800 lines → ≤7 (sigmoid tail)', () => {
     expect(score(800)).toBeLessThanOrEqual(7);
     expect(score(1500)).toBeLessThanOrEqual(2);
   });
 
-  // @req REQ-4.4.8-6
+  // @req REQ-4.4.9-6
   it('score is strictly decreasing with size', () => {
     expect(score(100)).toBeGreaterThan(score(500));
     expect(score(500)).toBeGreaterThan(score(900));
   });
 
-  // @req REQ-4.4.8-2
+  // @req REQ-4.4.9-2
   it('no PRs → prFocusScore = null (signal excluded from composite)', () => {
     expect(computeCodeQuality([], [], AUTHOR).prFocusScore).toBeNull();
   });
@@ -190,13 +190,13 @@ describe('signal 3 — PR focus sigmoid', () => {
 // ── Signal 4: Low rework (exponential penalty) ────────────────────────────────
 
 describe('signal 4 — low rework', () => {
-  // @req REQ-4.4.8-7
+  // @req REQ-4.4.9-7
   it('no rescopes → reworkRate = 0', () => {
     const result = computeCodeQuality([], [makePR()], AUTHOR);
     expect(result.reworkRate).toBe(0);
   });
 
-  // @req REQ-4.4.8-7
+  // @req REQ-4.4.9-7
   it('1 rescope/PR → score = round(100 × 2^-1) = 50', () => {
     const pr = makePR({ activities: [makeActivity('RESCOPED', 'other')] });
     const result = computeCodeQuality([], [pr], AUTHOR);
@@ -204,7 +204,7 @@ describe('signal 4 — low rework', () => {
     expect(Math.round(100 * Math.pow(2, -1))).toBe(50);
   });
 
-  // @req REQ-4.4.8-7
+  // @req REQ-4.4.9-7
   it('2 rescopes/PR → score = round(100 × 2^-2) = 25', () => {
     const pr = makePR({
       activities: [makeActivity('RESCOPED', 'other'), makeActivity('RESCOPED', 'other')],
@@ -217,7 +217,7 @@ describe('signal 4 — low rework', () => {
 // ── Composite ─────────────────────────────────────────────────────────────────
 
 describe('composite score', () => {
-  // @req REQ-4.4.8-1
+  // @req REQ-4.4.9-1
   it('all optimal → score = 100', () => {
     const PR_CREATED = NOW - 12 * 3600_000;
     const issue = makeIssue('Bug', [], true);
@@ -233,7 +233,7 @@ describe('composite score', () => {
     expect(result.score).toBe(100);
   });
 
-  // @req REQ-4.4.8-1
+  // @req REQ-4.4.9-1
   it('equal-weight arithmetic: round(0.25×a + 0.25×b + 0.25×c + 0.25×d)', () => {
     expect(Math.round(0.25 * 80 + 0.25 * 60 + 0.25 * 50 + 0.25 * 40)).toBe(58);
   });

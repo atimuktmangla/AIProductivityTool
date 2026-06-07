@@ -25,6 +25,7 @@ This tool gives engineering managers and team leads a real-time, quantitative vi
 - It is not a surveillance or surveillance-adjacent tool. Numbers reflect team patterns, not individual performance scores.
 - It does not replace code review judgment. Review depth counts actions, not quality of feedback.
 - It is not a replacement for retros or 1:1s — it surfaces data to make those conversations more grounded.
+- Spec-driven metrics measure process adherence, not developer competence. Regressions may reflect ambiguous specifications, not implementation errors.
 
 ### Management presentation talking points
 
@@ -64,6 +65,7 @@ Jira provides context that Bitbucket alone cannot:
 | Issues assigned to developer in date range | Ensures issues not referenced in commits are still counted |
 | Issue type (Story, Bug, Task, etc.) | Drives Jira Category Allocation pie chart |
 | Labels | Used together with issue type to classify Infra & Debt |
+| Issue changelog (`?expand=changelog`) | Spec-driven metrics only — status transition history for phased lead time and regression detection |
 
 Jira and Bitbucket are joined on Jira issue keys embedded in commit messages (e.g. `SS-1234 fix login timeout`). Issues found via both paths are deduplicated.
 
@@ -223,6 +225,49 @@ Close with the × button, click outside, or press Escape.
 
 ---
 
+### 8. Spec-Driven Metrics Panel (when `SPEC_METRICS_ENABLED=true`)
+
+**Purpose:** Measures how well the team builds to specification — phase-by-phase lead time, spec waste, and first-pass yield. Enabled by setting `SPEC_METRICS_ENABLED=true` in the backend `.env`.
+
+**Phased Lead Time:**
+
+| Phase | Measured as | What it reveals |
+|---|---|---|
+| Spec Definition | Ticket created → spec-approved status | Time spent writing and getting the spec signed off |
+| Implementation | Spec approved → PR merged | Pure coding + review time against a locked spec |
+| Verification | Verification entry → ticket done | Time spent validating the implementation against the spec |
+
+**Spec Waste Signals:**
+
+| Signal | Definition | What it reveals |
+|---|---|---|
+| Clarification Delay | Cumulative working hours spent in Blocked/Awaiting-Clarification status | How much time is lost to incomplete specifications upstream |
+| Spec Regressions | Count of Verification → In Progress transitions | The spec was not met on first pass; implementation had to restart |
+| Post-merge Rework | Commit messages after PR merge matching churn keywords (`fix spec`, `per feedback`, `scoping change`, etc.) | Rework that slipped through review before the spec failure was caught |
+
+**Spec Adherence Score (0–100):**
+
+The composite score applies an exponential penalty per regression (`100 × 2^−n`) plus a linear 5-point deduction per post-merge rework commit. A perfect score means the implementation reached QA on the first pass and no rework was needed after merge.
+
+| Score | Rating |
+|---|---|
+| ≥ 90 | Excellent — spec was clear and implementation matched |
+| 70–89 | Good — minor clarifications needed |
+| 50–69 | Fair — one or more regressions indicate spec gaps |
+| < 50 | Needs attention — recurring spec failures; review specification process |
+
+**First-pass Yield (FPY):** `true` when `specRegressions === 0` and `postMergeReworkCommits === 0`. A team-level FPY rate of ≥ 80% is the LinearB-equivalent target for spec-driven environments.
+
+**How to diagnose problems:**
+- High Spec Definition Time → too much back-and-forth before specs are approved; consider a structured spec review process
+- High Clarification Delay → specs are being approved before they are actually clear; engineers are unblocking themselves reactively
+- Spec Regressions > 0 → a ticket was sent back from QA; the spec did not cover the tested requirement
+- Post-merge Rework > 0 but Regressions = 0 → small spec misses caught in review or post-release, not in formal QA
+
+**Note:** Spec-driven metrics require the Jira workflow to include the status names configured in `.env` (`SPEC_APPROVED_STATUS`, `SPEC_VERIFICATION_STATUS`, `SPEC_DONE_STATUS`, `SPEC_BLOCKED_STATUS`). Tickets that never reach a configured status record 0 for that phase — this does not mean the phase was fast.
+
+---
+
 ## Known Gaps and Planned Enhancements
 
 ### Current limitations
@@ -249,6 +294,8 @@ Close with the × button, click outside, or press Escape.
 7. **Team comparison view** — side-by-side metrics for two or more teams.
 8. **Personal access token rotation UI** — currently requires editing the `.env` file; a settings page would simplify token management.
 9. **AI-generated narrative summaries** — the `/api/dashboard/insights` endpoint already calls Claude to produce natural-language summaries; surfacing these in the UI would make reports more shareable with non-technical stakeholders.
+10. **Spec-driven dashboard panel** — a dedicated UI section for phased lead time bars, team FPY rate, and per-developer spec adherence scores (metrics are already computed; UI panel is pending).
+11. **Spec regression drill-down** — click a regression count to see the exact Jira status transitions and timestamps that triggered it.
 
 ---
 

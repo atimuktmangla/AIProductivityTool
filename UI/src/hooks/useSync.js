@@ -11,6 +11,7 @@ const initialState = {
     selectedUsers: [],
     selectedProject: '',
     scheduleOption: 'now',
+    scheduledTime: '',
     purgeLogsOnRun: false,
     confirmed: false,
     isLoadingStatus: true,
@@ -27,6 +28,7 @@ function reducer(state, action) {
         case 'SET_SELECTED_USERS': return { ...state, selectedUsers: action.payload, confirmed: false };
         case 'SET_PROJECT': return { ...state, selectedProject: action.payload, confirmed: false };
         case 'SET_SCHEDULE': return { ...state, scheduleOption: action.payload, confirmed: false };
+        case 'SET_SCHEDULED_TIME': return { ...state, scheduledTime: action.payload, confirmed: false };
         case 'SET_PURGE': return { ...state, purgeLogsOnRun: action.payload };
         case 'SET_CONFIRMED': return { ...state, confirmed: action.payload };
         case 'SAVE_START': return { ...state, isSaving: true, error: null };
@@ -110,6 +112,9 @@ export function useSync() {
     const setScheduleOption = useCallback((opt) => {
         dispatch({ type: 'SET_SCHEDULE', payload: opt });
     }, []);
+    const setScheduledTime = useCallback((time) => {
+        dispatch({ type: 'SET_SCHEDULED_TIME', payload: time });
+    }, []);
     const setPurgeLogsOnRun = useCallback((val) => {
         dispatch({ type: 'SET_PURGE', payload: val });
     }, []);
@@ -117,7 +122,7 @@ export function useSync() {
         dispatch({ type: 'SET_CONFIRMED', payload: val });
     }, []);
     const saveAndRun = useCallback(async () => {
-        const { selectedUsers, scheduleOption, purgeLogsOnRun } = state;
+        const { selectedUsers, scheduleOption, scheduledTime, purgeLogsOnRun } = state;
         if (selectedUsers.length === 0) {
             dispatch({ type: 'SET_ERROR', payload: 'Select at least one user before running.' });
             return;
@@ -129,9 +134,12 @@ export function useSync() {
             }
             if (scheduleOption === 'daily' || scheduleOption === 'weekly') {
                 const intervalMinutes = scheduleOption === 'daily' ? 1440 : 10080;
+                const body = { developerIds: selectedUsers, intervalMinutes };
+                if (scheduledTime)
+                    body.scheduledTime = scheduledTime;
                 await apiFetch('/api/dashboard/sync/config', {
                     method: 'POST',
-                    body: JSON.stringify({ developerIds: selectedUsers, intervalMinutes }),
+                    body: JSON.stringify(body),
                 });
             }
             await apiFetch('/api/dashboard/sync/trigger', {
@@ -153,6 +161,7 @@ export function useSync() {
         setSelectedUsers,
         setSelectedProject,
         setScheduleOption,
+        setScheduledTime,
         setPurgeLogsOnRun,
         setConfirmed,
         saveAndRun,

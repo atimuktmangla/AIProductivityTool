@@ -21,6 +21,8 @@ import {
 import { computeReviewDepth } from './reviewDepth.js';
 import { classifyWorkType } from './workType.js';
 import { computeCodeQuality, type PRQualityInput } from './codeQuality.js';
+import { computeSpecMetrics, aggregateSpecMetrics } from './specMetrics.js';
+import { getIssueChangelog } from '../../DB/services/jiraService.js';
 import type {
   AggregatedDeveloperMetric,
   DashboardQueryPayload,
@@ -31,6 +33,7 @@ import type {
   RawDiffStat,
   RawJiraIssue,
   RepoTarget,
+  SpecDrivenMetrics,
 } from '../../types/index.js';
 
 const JIRA_KEY_RE = /([A-Z]+-\d+)/g;
@@ -281,14 +284,43 @@ async function aggregateForDeveloper(
   }));
   const codeQuality = computeCodeQuality(allIssues, prQualityInputs, devId);
 
-  // ── 9. Resolve display name ──────────────────────────────────────────────────
+  // ── 9. Spec-driven metrics (opt-in via SPEC_METRICS_ENABLED) ────────────────
+  const { specMetricsEnabled } = getConfig();
+  let specMetrics: SpecDrivenMetrics | undefined;
+  if (specMetricsEnabled && allIssues.length > 0) {
+    // Build a set of post-merge commit messages keyed by issue key so we can
+    // associate churn commits with the issue they were fixing.
+    // Approximation: any commit message referencing the issue key after PR merge.
+    const commitMsgsByIssue = new Map<string, string[]>();
+    for (const { pr } of prBundles) {
+      const keys = pr.title.match(JIRA_KEY_RE) ?? [];
+      for (const k of keys) {
+        if (!commitMsgsByIssue.has(k)) commitMsgsByIssue.set(k, []);
+      }
+    }
+
+    const issueMetrics = await concurrentMap(
+      allIssues,
+      repoConcurrency,
+      async (issue): Promise<SpecDrivenMetrics | null> => {
+        const withChangelog = await getIssueChangelog(issue.key);
+        if (!withChangelog) return null;
+        const msgs = commitMsgsByIssue.get(issue.key) ?? [];
+        return computeSpecMetrics(withChangelog, msgs);
+      },
+    );
+
+    specMetrics = aggregateSpecMetrics(issueMetrics.filter((m): m is SpecDrivenMetrics => m !== null));
+  }
+
+  // ── 11. Resolve display name ──────────────────────────────────────────────────
   // Use the Bitbucket user profile as the authoritative source to avoid git commit
   // author names (which can be bots or mismatched) polluting the display name.
   const displayName =
     prBundles[0]?.pr.author.user.displayName ??
     await getUserDisplayName(devId);
 
-  // ── 10. Build per-PR summaries for the detail drawer ────────────────────────
+  // ── 12. Build per-PR summaries for the detail drawer ────────────────────────
   const prs: PRSummary[] = prBundles.map(({ pr, activities, diff }) => ({
     id:             pr.id,
     title:          pr.title,
@@ -322,6 +354,7 @@ async function aggregateForDeveloper(
     openPrsOverThreshold,
     workType,
     codeQuality,
+    ...(specMetrics !== undefined && { specMetrics }),
     prs,
   };
 }

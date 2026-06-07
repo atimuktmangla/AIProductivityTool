@@ -1,6 +1,6 @@
 import { getConfig } from '../../BL/config/env.js';
 import { atlassianGet, atlassianPost } from '../client/atlassianFetch.js';
-import type { RawJiraIssue, JiraSearchResponse } from '../../types/index.js';
+import type { RawJiraIssue, JiraSearchResponse, JiraIssueWithChangelog } from '../../types/index.js';
 
 export async function pingJira(): Promise<void> {
   const { jiraBaseUrl, jiraToken } = getConfig();
@@ -34,6 +34,22 @@ export async function getIssuesByKeys(issueKeys: string[]): Promise<RawJiraIssue
   if (issueKeys.length === 0) return [];
   const jql = `key in (${issueKeys.map(jqlStr).join(',')})`;
   return runJqlSearch(jql);
+}
+
+// Fetches a single issue with its full status-transition changelog.
+// Used only when SPEC_METRICS_ENABLED=true to avoid unnecessary API load.
+export async function getIssueChangelog(issueKey: string): Promise<JiraIssueWithChangelog | null> {
+  const { jiraBaseUrl, jiraToken } = getConfig();
+  try {
+    return await atlassianGet<JiraIssueWithChangelog>(
+      jiraBaseUrl,
+      jiraToken,
+      `/rest/api/2/issue/${encodeURIComponent(issueKey)}`,
+      { expand: 'changelog', fields: 'summary,issuetype,status,assignee,created,updated,resolutiondate,labels' },
+    );
+  } catch {
+    return null;
+  }
 }
 
 async function runJqlSearch(jql: string): Promise<RawJiraIssue[]> {

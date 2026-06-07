@@ -93,6 +93,7 @@ Not covered: generic tech tutorials, third-party docs, external APIs with no DSO
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
+at specs/001-sqlite-cache-migration/plan.md
 <!-- SPECKIT END -->
 
 <!-- code-review-graph MCP tools -->

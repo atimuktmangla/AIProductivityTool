@@ -356,3 +356,48 @@ sequenceDiagram
 
     UI->>UI: render metrics + show green cache banner "Partial cache hit"
 ```
+
+---
+
+## 6. Spec-driven metrics computation (`SPEC_METRICS_ENABLED=true`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant AGG as BL / aggregator
+    participant JS as DB / jiraService
+    participant JIRA as Jira Server
+    participant SM as BL / specMetrics
+
+    Note over AGG: after standard metric computation (steps 1–9)
+    AGG->>AGG: specMetricsEnabled? → yes
+    AGG->>AGG: collect allIssues keys (commit-linked + assignee)
+
+    loop for each issue key (parallel, bounded by repoConcurrency)
+        AGG->>JS: getIssueChangelog(issueKey)
+        JS->>JIRA: GET /rest/api/2/issue/{key}?expand=changelog
+        JIRA-->>JS: JiraIssueWithChangelog (status histories)
+        JS-->>AGG: JiraIssueWithChangelog | null
+
+        alt changelog fetched
+            AGG->>SM: computeSpecMetrics(issue, postMergeCommitMessages)
+            SM->>SM: statusTransitions() — sort histories, build transition windows
+            SM->>SM: firstTransitionToMs() — locate specApproved / verification / done
+            SM->>SM: computeCycleTimeHrs() × 3 — phased lead times (leave-adjusted)
+            SM->>SM: sum blocked windows → clarificationDelayHrs
+            SM->>SM: count Verification→InProgress → specRegressions
+            SM->>SM: regex commit messages → postMergeReworkCommits
+            SM->>SM: compute specAdherenceScore
+            SM-->>AGG: SpecDrivenMetrics (per issue)
+        else fetch failed
+            AGG->>AGG: skip issue silently
+        end
+    end
+
+    AGG->>SM: aggregateSpecMetrics(perIssue[])
+    SM->>SM: avg phased times + adherence; sum regressions + rework; FPY = totals both 0
+    SM-->>AGG: SpecDrivenMetrics (developer-level)
+
+    AGG->>AGG: spread specMetrics into AggregatedDeveloperMetric
+    AGG-->>MR: AggregatedDeveloperMetric (with specMetrics)
+```

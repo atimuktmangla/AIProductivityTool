@@ -1,20 +1,5 @@
-import { join } from 'node:path';
-import { getConfig } from '../../BL/config/env.js';
-import { readJsonCache, writeJsonCache } from './jsonFileCache.js';
+import { getDb } from '../store/inMemoryDb.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
-
-interface MetricsCacheEnvelope {
-  metric:   AggregatedDeveloperMetric;
-  cachedAt: number;
-}
-
-function safeKey(s: string): string {
-  return s.replace(/[/\\:*?"<>|,]/g, '_');
-}
-
-function devCachePath(cacheDir: string, devId: string, startDate: string, endDate: string): string {
-  return join(cacheDir, 'metrics-result', `${safeKey(devId)}__${startDate}__${endDate}.json`);
-}
 
 /**
  * Returns cached metrics split into hits (fresh) and misses (absent or stale).
@@ -27,32 +12,34 @@ export async function getCachedMetrics(
   endDate:      string,
   maxAgeMs:     number,
 ): Promise<{ hits: AggregatedDeveloperMetric[]; misses: string[]; oldestCachedAt: number }> {
-  const { cacheDir } = getConfig();
+  const db = getDb();
+  const stmt = db.prepare<[string, string, string], { metric_json: string; cached_at: number }>(
+    'SELECT metric_json, cached_at FROM metrics_cache WHERE developer_id=? AND start_date=? AND end_date=?',
+  );
+
   const hits: AggregatedDeveloperMetric[] = [];
   const misses: string[] = [];
   let oldestCachedAt = 0;
+  const now = Date.now();
 
-  await Promise.all(
-    developerIds.map(async (devId) => {
-      const path = devCachePath(cacheDir, devId, startDate, endDate);
-      const envelope = await readJsonCache<MetricsCacheEnvelope>(path);
-      if (envelope && Date.now() - envelope.cachedAt <= maxAgeMs) {
-        hits.push(envelope.metric);
-        if (oldestCachedAt === 0 || envelope.cachedAt < oldestCachedAt) {
-          oldestCachedAt = envelope.cachedAt;
-        }
-      } else {
-        misses.push(devId);
+  for (const devId of developerIds) {
+    const row = stmt.get(devId, startDate, endDate);
+    if (row && now - row.cached_at <= maxAgeMs) {
+      hits.push(JSON.parse(row.metric_json) as AggregatedDeveloperMetric);
+      if (oldestCachedAt === 0 || row.cached_at < oldestCachedAt) {
+        oldestCachedAt = row.cached_at;
       }
-    }),
-  );
+    } else {
+      misses.push(devId);
+    }
+  }
 
   return { hits, misses, oldestCachedAt };
 }
 
 /**
- * Writes one cache file per developer. Each file is keyed by (devId, startDate, endDate)
- * so individual developers can be refreshed independently without touching others.
+ * Stores one cache entry per developer, keyed by (developerId, startDate, endDate).
+ * Uses INSERT OR REPLACE so subsequent writes overwrite stale entries atomically.
  */
 export async function setCachedMetrics(
   developerIds: string[],
@@ -60,12 +47,13 @@ export async function setCachedMetrics(
   endDate:      string,
   metrics:      AggregatedDeveloperMetric[],
 ): Promise<void> {
-  const { cacheDir } = getConfig();
-
-  await Promise.all(
-    metrics.map((metric) => {
-      const path = devCachePath(cacheDir, metric.developerId, startDate, endDate);
-      return writeJsonCache<MetricsCacheEnvelope>(path, { metric, cachedAt: Date.now() });
-    }),
+  const db = getDb();
+  const stmt = db.prepare(
+    'INSERT OR REPLACE INTO metrics_cache (developer_id, start_date, end_date, metric_json, cached_at) VALUES (?,?,?,?,?)',
   );
+  const cachedAt = Date.now();
+
+  for (const metric of metrics) {
+    stmt.run(metric.developerId, startDate, endDate, JSON.stringify(metric), cachedAt);
+  }
 }

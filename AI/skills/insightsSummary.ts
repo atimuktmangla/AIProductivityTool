@@ -97,23 +97,54 @@ function computeBaseInsights(data: AggregatedDeveloperMetric[]): TeamInsights {
 }
 
 function buildPrompt(data: AggregatedDeveloperMetric[], base: TeamInsights): string {
-  const devSummaries = data.map((d) =>
-    `- ${d.name}: ${d.totalCommits} commits, ${d.totalPRs} PRs, ` +
-    `cycle ${d.cycleTimeHrs.toFixed(1)}h, pickup ${d.pickupDelayHrs.toFixed(1)}h, ` +
-    `quality score ${d.codeQuality.score}/100, ` +
-    `bugs ${d.workType.bugs} / features ${d.workType.features} / infra ${d.workType.infraOrDebt}`,
-  ).join('\n');
+  const devSummaries = data.map((d) => {
+    let line =
+      `- ${d.name}: ${d.totalCommits} commits, ${d.totalPRs} PRs, ` +
+      `cycle ${d.cycleTimeHrs.toFixed(1)}h, pickup ${d.pickupDelayHrs.toFixed(1)}h, ` +
+      `quality score ${d.codeQuality.score}/100, ` +
+      `bugs ${d.workType.bugs} / features ${d.workType.features} / infra ${d.workType.infraOrDebt}`;
+    if (d.specMetrics) {
+      line +=
+        `, spec adherence ${d.specMetrics.specAdherenceScore}/100` +
+        `, regressions ${d.specMetrics.specRegressions}` +
+        `, clarification delay ${d.specMetrics.clarificationDelayHrs.toFixed(1)}h` +
+        `, FPY ${d.specMetrics.firstPassYield ? 'PASS' : 'FAIL'}`;
+    }
+    return line;
+  }).join('\n');
+
+  const hasSpecData = data.some((d) => d.specMetrics !== undefined);
+  const specSection = hasSpecData
+    ? `\nSpec-driven summary: ${buildSpecSummary(data)}`
+    : '';
 
   return `You are an engineering manager assistant. Write a concise 3–4 sentence narrative summary of the following team metrics report. Focus on actionable observations. Do not use bullet points — write in plain prose. Do not repeat raw numbers already obvious from a dashboard. Point out the most important thing to act on.
 
 Team health score: ${base.teamHealthScore}/100
 Bottleneck: ${base.bottleneckDetail}
-Work type: ${base.workTypeDetail}
+Work type: ${base.workTypeDetail}${specSection}
 
 Per-developer breakdown:
 ${devSummaries}
 
 Write the summary now:`;
+}
+
+function buildSpecSummary(data: AggregatedDeveloperMetric[]): string {
+  const withSpec = data.filter((d) => d.specMetrics);
+  if (withSpec.length === 0) return 'No spec data.';
+
+  const avgAdherence = withSpec.reduce((s, d) => s + d.specMetrics!.specAdherenceScore, 0) / withSpec.length;
+  const totalRegressions = withSpec.reduce((s, d) => s + d.specMetrics!.specRegressions, 0);
+  const avgClarDelay = withSpec.reduce((s, d) => s + d.specMetrics!.clarificationDelayHrs, 0) / withSpec.length;
+  const fpyCount = withSpec.filter((d) => d.specMetrics!.firstPassYield).length;
+
+  return (
+    `Avg spec adherence ${Math.round(avgAdherence)}/100. ` +
+    `Total spec regressions ${totalRegressions}. ` +
+    `Avg clarification delay ${avgClarDelay.toFixed(1)}h. ` +
+    `${fpyCount}/${withSpec.length} developers achieved first-pass yield.`
+  );
 }
 
 function avg(values: number[]): number {

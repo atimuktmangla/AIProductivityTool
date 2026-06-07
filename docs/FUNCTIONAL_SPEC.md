@@ -1,7 +1,7 @@
 # Functional Specification — AI Productivity Tool
 
-**Version:** 1.4
-**Date:** 2026-06-06
+**Version:** 1.5
+**Date:** 2026-06-07
 **Audience:** Product owners, engineering leads, QA
 
 > **Requirement IDs** — every testable requirement carries a `REQ-<section>-<n>` tag.
@@ -34,6 +34,7 @@ The AI Productivity Tool is an internal dashboard that aggregates developer acti
 - Period-over-period delta comparison
 - **Background sync job** with admin UI for scheduling, triggering, and monitoring
 - **Per-developer JSON file cache** with partial cache hit merging for sub-second report loads
+- **Spec-driven metrics** (opt-in) — phased lead times, spec regression detection, clarification delay, first-pass yield, and spec adherence score derived from the Jira issue changelog
 
 ### Out of scope
 
@@ -193,6 +194,7 @@ A composite 0–100 score from four equal-weighted signals (25% each), derived e
 <!-- REQ-4.7-2 --> Upstream 5xx → `502 Bad Gateway` with upstream detail.
 <!-- REQ-4.7-3 --> Validation failure → `400 Bad Request` with field description.
 <!-- REQ-4.7-4 --> All other errors → `500 Internal Server Error`.
+<!-- REQ-4.7-5 --> Upstream 429 (rate limit) → retry the upstream call up to **3 times** with exponential backoff and jitter (initial delay 500 ms, multiplier 2, ±25% jitter). If all retries are exhausted, respond `429 Too Many Requests` to the client with a `Retry-After: 60` header.
 
 ### 4.8 Sync job admin
 
@@ -229,6 +231,10 @@ The Sync Jobs tab offers three modes:
 
 <!-- REQ-4.8.5-1 --> A "Purge run logs before starting" checkbox calls `DELETE /api/dashboard/sync/logs` before triggering the sync, removing all files in `data/sync-logs/`.
 
+#### 4.8.7 Concurrent trigger protection
+
+<!-- REQ-4.8.7-1 --> If a sync run is already in progress when `POST /sync/trigger` is received, the server MUST respond `409 Conflict` with body `{ "error": "sync_in_progress", "runId": "<activeRunId>" }`. The client MUST NOT start a new run.
+
 #### 4.8.6 Cache freshness indicator
 
 <!-- REQ-4.8.6-1 --> When results include data from the sync cache, a green banner reads "Served from sync cache · synced {date}". Banner includes a "Manage sync jobs →" link to the Sync Jobs tab.
@@ -237,8 +243,36 @@ The Sync Jobs tab offers three modes:
 ### 4.9 Input validation
 
 <!-- REQ-4.9-1 --> `developerIds` array must have at least 1 and at most 50 entries; exceeding 50 returns HTTP 400.
+<!-- REQ-4.9-6 --> All `/api/*` routes MUST require an `Authorization: Bearer <token>` header. Absent or malformed headers return HTTP 401 with body `{ "error": "unauthorized" }`. The token MUST be compared against the `API_KEY` env var using a constant-time comparison to prevent timing attacks.
 <!-- REQ-4.9-2 --> Date range must not exceed 366 days; exceeding returns HTTP 400.
 <!-- REQ-4.9-3 --> Leading/trailing whitespace in `developerIds` entries is trimmed before processing.
+<!-- REQ-4.9-4 --> Each `repoTargets` entry `projectKey` must match `/^[A-Z][A-Z0-9_]{0,9}$/`; `repoSlug` must match `/^[a-z0-9_.\-]{1,128}$/`. Any entry failing either pattern returns HTTP 400 with field description.
+<!-- REQ-4.9-5 --> Each `projectKeys` entry must match the same `projectKey` pattern above. Array may have at most 20 entries; exceeding returns HTTP 400.
+
+### 4.10 API rate-limit and concurrency
+
+<!-- REQ-4.10-1 --> All outbound Bitbucket and Jira API calls MUST be bounded by `MAX_CONCURRENT_API_CALLS` (env var, default `50`). The same `concurrentMap` utility used for spec-metrics MUST be applied to all aggregator fan-out loops.
+<!-- REQ-4.10-2 --> When any upstream API responds with HTTP 429, the call MUST be retried up to 3 times with exponential backoff (initial 500 ms, multiplier 2, ±25% jitter). After all retries exhausted, the aggregator MUST surface `429 Too Many Requests` to the client with a `Retry-After: 60` header (see REQ-4.7-5).
+
+### 4.11 Clarifications
+
+#### Session 2026-06-07
+
+- Q: How should upstream HTTP 429 (rate limit) responses be handled? → A: Propagate 429 to client with `Retry-After` header; retry upstream up to 3× with exponential backoff + jitter.
+- Q: What is the hard concurrency cap for outbound Bitbucket/Jira API calls during a live report? → A: Configurable `MAX_CONCURRENT_API_CALLS` env var, default 50.
+- Q: Should `repoTargets` and `projectKeys` fields be validated at the HTTP boundary? → A: Yes — validate `projectKey` format (`/^[A-Z][A-Z0-9_]{0,9}$/`) and `repoSlug` format (`/^[a-z0-9_.-]{1,128}$/`); return HTTP 400 on violation.
+- Q: What happens when `POST /sync/trigger` is called while a sync is already running? → A: Return HTTP 409 Conflict with `{ "error": "sync_in_progress", "runId": "<activeRunId>" }`.
+- Q: What is the API key validation contract for all `/api/*` routes? → A: `Authorization: Bearer <token>` required; HTTP 401 on absent/malformed; constant-time compare against `API_KEY` env var.
+
+---
+
+### 4.12 In-memory SQLite storage (migration from JSON cache files)
+
+<!-- REQ-4.12-1 --> On server startup the system MUST initialise a single in-memory SQLite (`:memory:`) instance and create all required tables before accepting any API requests. If initialisation fails for any reason (e.g., missing native binary, Node ABI mismatch) the server MUST abort startup immediately with a structured error message naming the likely cause and exit with a non-zero code within 5 seconds. Degraded silent operation is not permitted.
+<!-- REQ-4.12-2 --> The system MUST store computed developer metrics (keyed by `developerId`, `startDate`, and `endDate`) together with a `cachedAt` Unix-ms timestamp in the in-memory store, and retrieve them as hits (entries within `maxAgeMs`) or misses (absent or stale) — preserving the existing `getCachedMetrics` / `setCachedMetrics` public signatures unchanged.
+<!-- REQ-4.12-3 --> The system MUST store sync run logs (`runId`, timestamps, `durationMs`, `totalUsers`, per-batch detail) in the in-memory store immediately after each sync run completes, support listing the last N logs ordered by `startedAt` descending, and support purging all logs — preserving the existing `writeRunLog` / `listRunLogs` / `purgeRunLogs` internal/public signatures unchanged.
+<!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `DB/store/inMemoryDb.ts`; all other modules import from there.
+<!-- REQ-4.12-5 --> After this migration the system MUST NOT write any new `data/cache/metrics-result/*.json` or `data/sync-logs/*.json` files. On first startup after deployment — detected by the absence of sentinel file `data/.migrated-to-sqlite` — the system MUST attempt to delete both legacy directories, log a one-time migration notice, write the sentinel file, and continue normally regardless of whether deletion succeeds (non-blocking; warn on failure). Subsequent startups skip the cleanup because the sentinel file is present.
 
 ---
 
@@ -250,8 +284,9 @@ The Sync Jobs tab offers three modes:
 | Response time (cache) | < 500 ms for any team size when all developers are in the sync cache       |
 | Concurrency           | Per-developer and per-PR API calls parallelised via `Promise.all`          |
 | Cache scalability     | One JSON file per (devId, startDate, endDate) — scales to hundreds of devs without contention |
+| API concurrency       | All outbound Bitbucket/Jira calls bounded by `MAX_CONCURRENT_API_CALLS` (default 50); configurable per deployment |
 | SSL                   | Self-signed on-prem certificates tolerated via `rejectUnauthorized: false` |
-| Auth                  | Bearer token (PAT) — no OAuth flow required                                |
+| Auth                  | Bearer token (PAT) — no OAuth flow required; `Authorization: Bearer <token>` header required on all `/api/*` routes |
 | TypeScript strictness | `"strict": true` in both backend and frontend                              |
 | UI theme              | Dark theme (background `#1a1d27`) with CSS custom properties; all colour values via semantic tokens |
 
@@ -316,8 +351,42 @@ See [../README.md](../README.md#configuration) for all environment variables.
 
 ---
 
-## 9. Known limitations
+## 9. Spec-driven metrics requirements
+
+### 9.1 Prerequisites
+
+<!-- REQ-9.1-1 --> Spec-driven metrics are gated behind `SPEC_METRICS_ENABLED=true`. When disabled, `specMetrics` is absent from all `AggregatedDeveloperMetric` objects.
+<!-- REQ-9.1-2 --> Jira status names for all four phases are configurable via env vars (`SPEC_APPROVED_STATUS`, `SPEC_VERIFICATION_STATUS`, `SPEC_DONE_STATUS`, `SPEC_BLOCKED_STATUS`). Comparisons are case-insensitive.
+<!-- REQ-9.1-3 --> When a ticket never reaches a configured status, the corresponding time phase is recorded as `0` — the phase is absent from the lifecycle, not slow.
+
+### 9.2 Phased lead time
+
+<!-- REQ-9.2-1 --> **Spec Definition Time** — working hours from ticket `created` to first transition into the spec-approved status, computed using the same leave-adjusted working-hours formula as cycle time.
+<!-- REQ-9.2-2 --> **Implementation Time** — working hours from spec-approved status to the ticket entering verification status. Falls back to ticket created when spec-approved is not in the changelog.
+<!-- REQ-9.2-3 --> **Verification Time** — working hours from verification status entry to `resolutiondate` (or the first transition into the done status if `resolutiondate` is null).
+
+### 9.3 Spec waste signals
+
+<!-- REQ-9.3-1 --> **Clarification Delay** — cumulative leave-adjusted working hours the ticket spent in the blocked/awaiting-clarification status across all visits. Multiple visits are summed.
+<!-- REQ-9.3-2 --> **Spec Regressions** — count of status transitions whose `fromStatus` (lowercased) equals `specVerificationStatus` and whose `toStatus` is not `done` or `verification`. Each such transition represents the implementation being sent back for rework after failing verification.
+<!-- REQ-9.3-3 --> **Post-merge Rework Commits** — commit messages (supplied by the caller from PR commit data) that match `/\b(fix spec|per feedback|scoping change|spec fix|clarif|revert spec|spec update|per review)\b/i`. Counted per issue.
+
+### 9.4 Spec adherence score
+
+<!-- REQ-9.4-1 --> Score formula: `max(0, 100 − regressionPenalty − churnPenalty)` where `regressionPenalty = round(100 × (1 − 2^(−specRegressions)))` and `churnPenalty = min(postMergeReworkCommits × 5, 40)`.
+<!-- REQ-9.4-2 --> First-pass yield (`firstPassYield`) is `true` when `specRegressions === 0` AND `postMergeReworkCommits === 0`.
+
+### 9.5 Aggregation
+
+<!-- REQ-9.5-1 --> Per-issue `SpecDrivenMetrics` objects are computed in parallel (bounded by `repoConcurrency`). Issues for which the changelog cannot be fetched are silently excluded.
+<!-- REQ-9.5-2 --> Developer-level `specMetrics` is the average of all per-issue values for phased times and clarification delay; `specRegressions` and `postMergeReworkCommits` are totals; `specAdherenceScore` is the average of per-issue scores; `firstPassYield` is `true` only when totals are both zero.
+
+---
+
+## 10. Known limitations
 
 - The Bitbucket `/commits` endpoint does not support date-range params; all commits are fetched newest-first and scanned until the start date, which may be slow on repos with very long histories.
 - The Jira `development[pullrequests].all > 0` JQL filter requires the Jira DVCS connector to be configured on the Jira instance.
 - Tier-3 auto-discovery relies on `/profile/recent/repos`, which only returns repos the user has recently pushed to — very old repos may be missed without Tier-1 or Tier-2 configuration.
+- Spec-driven metrics add one Jira changelog API call per linked issue. On large teams with many Jira issues per developer, this may noticeably increase response time. Use the background sync job to absorb this cost offline.
+- Post-merge rework detection is keyword-based on commit messages. Teams with inconsistent commit message conventions may see underreported churn.

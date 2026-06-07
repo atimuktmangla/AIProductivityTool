@@ -39,6 +39,16 @@ export interface AppConfig {
   syncDeveloperIds: string[];
   /** How often the background sync job runs, in minutes. 0 = disabled. */
   syncIntervalMinutes: number;
+  /** Whether spec-driven metrics (phased lead time, spec regressions) are computed. */
+  specMetricsEnabled: boolean;
+  /** Jira status name (case-insensitive) that marks a spec as approved/locked. */
+  specApprovedStatus: string;
+  /** Jira status name (case-insensitive) that marks the start of verification/QA. */
+  specVerificationStatus: string;
+  /** Jira status name (case-insensitive) that marks a ticket as fully done. */
+  specDoneStatus: string;
+  /** Jira status name (case-insensitive) that means blocked/awaiting clarification. */
+  specBlockedStatus: string;
 }
 
 let cached: AppConfig | null = null;
@@ -97,6 +107,11 @@ export function getConfig(): AppConfig {
     aiApiKey: process.env.AI_API_KEY ?? "",
     syncDeveloperIds: parseKeys(process.env.SYNC_DEVELOPER_IDS ?? ""),
     syncIntervalMinutes: parseInt(process.env.SYNC_INTERVAL_MINUTES ?? "0", 10),
+    specMetricsEnabled: process.env.SPEC_METRICS_ENABLED === "true",
+    specApprovedStatus: process.env.SPEC_APPROVED_STATUS ?? "spec approved",
+    specVerificationStatus: process.env.SPEC_VERIFICATION_STATUS ?? "verification",
+    specDoneStatus: process.env.SPEC_DONE_STATUS ?? "done",
+    specBlockedStatus: process.env.SPEC_BLOCKED_STATUS ?? "blocked",
   };
 
   return cached;

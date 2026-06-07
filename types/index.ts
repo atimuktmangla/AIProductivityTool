@@ -36,6 +36,22 @@ export interface PRSummary {
   url:            string;
 }
 
+export interface SpecDrivenMetrics {
+  // Phased lead time (working hours, leave-adjusted)
+  specDefinitionTimeHrs: number;   // ticket created → spec approved (status transition)
+  implementationTimeHrs: number;   // spec approved → PR merged
+  verificationTimeHrs: number;     // PR merged → ticket moved to Done/Verified status
+
+  // Spec waste signals
+  clarificationDelayHrs: number;   // cumulative hours spent in Blocked/Awaiting-Clarification
+  specRegressions: number;         // times ticket moved back from Verification to In Progress
+  postMergeReworkCommits: number;  // commits pushed after ticket entered verification phase
+
+  // Yield
+  firstPassYield: boolean;         // true when specRegressions === 0 and postMergeReworkCommits === 0
+  specAdherenceScore: number;      // 0–100 composite: penalises regressions + post-merge churn
+}
+
 export interface AggregatedDeveloperMetric {
   developerId: string;
   name: string;
@@ -55,6 +71,7 @@ export interface AggregatedDeveloperMetric {
     infraOrDebt: number;
   };
   codeQuality: CodeQualityScore;
+  specMetrics?: SpecDrivenMetrics; // present only when SPEC_METRICS_ENABLED=true
   prs: PRSummary[];
 }
 
@@ -158,6 +175,26 @@ export interface MetricsResult {
   insights?:    TeamInsights;
   cacheStatus?: 'full' | 'partial' | 'none';
   cachedAt?:    number; // epoch ms of oldest cache entry used
+}
+
+// ─── Jira Changelog (used by spec-driven metrics) ────────────────────────────
+
+export interface JiraChangelogItem {
+  field: string;
+  fromString: string | null;
+  toString: string | null;
+}
+
+export interface JiraChangelogEntry {
+  id: string;
+  created: string; // ISO 8601
+  items: JiraChangelogItem[];
+}
+
+export interface JiraIssueWithChangelog extends RawJiraIssue {
+  changelog: {
+    histories: JiraChangelogEntry[];
+  };
 }
 
 // ─── Internal ────────────────────────────────────────────────────────────────

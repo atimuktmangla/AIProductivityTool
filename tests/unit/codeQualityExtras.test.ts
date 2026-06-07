@@ -37,28 +37,28 @@ function makePR(linesChanged = 100): PRQualityInput {
 
 // ── Bug ratio (informational only) ───────────────────────────────────────────
 
-describe('bug ratio (REQ-4.4.8-8)', () => {
-  // @req REQ-4.4.8-8
+describe('bug ratio (REQ-4.4.9-8)', () => {
+  // @req REQ-4.4.9-8
   it('bugRatio is bugs / total issues', () => {
     const issues = [makeIssue('Bug'), makeIssue('Bug'), makeIssue('Story')];
     const result = computeCodeQuality(issues, [], AUTHOR);
     expect(result.bugRatio).toBeCloseTo(2 / 3, 2);
   });
 
-  // @req REQ-4.4.8-8
+  // @req REQ-4.4.9-8
   it('bugRatio = 0 when no bug-type issues', () => {
     const result = computeCodeQuality([makeIssue('Story')], [], AUTHOR);
     expect(result.bugRatio).toBe(0);
   });
 
-  // @req REQ-4.4.8-8
+  // @req REQ-4.4.9-8
   it('bugRatio = 1 when all issues are bugs', () => {
     const issues = [makeIssue('Bug'), makeIssue('Defect')];
     const result = computeCodeQuality(issues, [], AUTHOR);
     expect(result.bugRatio).toBe(1);
   });
 
-  // @req REQ-4.4.8-8
+  // @req REQ-4.4.9-8
   it('bugRatio is returned but does not affect composite score', () => {
     // A developer with all bugs-resolved should still reach score 100
     const issues = [makeIssue('Bug', [], true), makeIssue('Defect', [], true)];
@@ -89,8 +89,8 @@ describe('bug ratio (REQ-4.4.8-8)', () => {
 
 // ── Rating bands ─────────────────────────────────────────────────────────────
 
-describe('rating bands (REQ-4.4.8-9)', () => {
-  // @req REQ-4.4.8-9
+describe('rating bands (REQ-4.4.9-9)', () => {
+  // @req REQ-4.4.9-9
   it('Good ≥ 75', () => {
     // All resolved issues + small PR + approval → score = 100
     const issues = [makeIssue('Bug', [], true)];
@@ -116,7 +116,7 @@ describe('rating bands (REQ-4.4.8-9)', () => {
     expect(score).toBeGreaterThanOrEqual(75);
   });
 
-  // @req REQ-4.4.8-9
+  // @req REQ-4.4.9-9
   it('Needs work < 50 — unresolved issues, large PRs, no approval', () => {
     const issues = [makeIssue('Bug', [], false), makeIssue('Story', [], false)];
     const pr = makePR(2000); // huge PR, no activities

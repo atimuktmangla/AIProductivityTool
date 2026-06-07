@@ -1,7 +1,7 @@
 # Detailed Design — AI Productivity Tool
 
-**Version:** 1.4
-**Date:** 2026-06-06
+**Version:** 1.5
+**Date:** 2026-06-07
 **Audience:** Backend and frontend engineers
 
 ---
@@ -60,6 +60,7 @@ AIProductivityTool/
 │       ├── cycleTime.ts        # Cycle / pickup / review lifecycle
 │       ├── reviewDepth.ts      # Review action counting
 │       ├── codeQuality.ts      # 4-signal composite quality score
+│       ├── specMetrics.ts      # Spec-driven phased lead time, regressions, FPY (opt-in)
 │       └── workType.ts         # Jira issue type classifier
 ├── DB/                         # Data access layer
 │   ├── client/
@@ -153,29 +154,34 @@ The repo also has:
 
 ```typescript
 interface AppConfig {
-  jiraBaseUrl:           string;    // trailing slash stripped
-  jiraToken:             string;
-  bitbucketBaseUrl:      string;    // trailing slash stripped
-  bitbucketToken:        string;
-  apiKey:                string;    // X-Api-Key for all /api routes
-  allowedOrigin:         string;    // CORS; default http://localhost:5173
-  botUserPattern:        string;    // regex for bot accounts
-  stalePrThresholdDays:  number;    // default 3
-  port:                  number;    // default 3000
-  jiraPageSize:          number;    // default 500
-  metricsConcurrency:    number;    // parallel developer aggregations; default 3
-  httpConcurrency:       number;    // global HTTP semaphore; default 12
-  httpTimeoutMs:         number;    // Axios timeout; default 60000
-  repoConcurrency:       number;    // parallel repo-level calls per dev; default 4
-  cacheDir:              string;    // default 'data/cache'
-  cacheRetentionMonths:  number;    // eviction window; default 6
-  repoTargets:           RepoTarget[];  // Tier 1 from BITBUCKET_PROJECTS
-  bitbucketProjectKeys:  string[];      // Tier 2 from BITBUCKET_PROJECT_KEYS
-  aiInsightsEnabled:     boolean;
-  aiProvider:            'anthropic' | 'openai' | 'gemini';
-  aiApiKey:              string;
-  syncDeveloperIds:      string[];  // from SYNC_DEVELOPER_IDS
-  syncIntervalMinutes:   number;    // from SYNC_INTERVAL_MINUTES; 0 = disabled
+  jiraBaseUrl:              string;    // trailing slash stripped
+  jiraToken:                string;
+  bitbucketBaseUrl:         string;    // trailing slash stripped
+  bitbucketToken:           string;
+  apiKey:                   string;    // X-Api-Key for all /api routes
+  allowedOrigin:            string;    // CORS; default http://localhost:5173
+  botUserPattern:           string;    // regex for bot accounts
+  stalePrThresholdDays:     number;    // default 3
+  port:                     number;    // default 3000
+  jiraPageSize:             number;    // default 500
+  metricsConcurrency:       number;    // parallel developer aggregations; default 3
+  httpConcurrency:          number;    // global HTTP semaphore; default 12
+  httpTimeoutMs:            number;    // Axios timeout; default 60000
+  repoConcurrency:          number;    // parallel repo-level calls per dev; default 4
+  cacheDir:                 string;    // default 'data/cache'
+  cacheRetentionMonths:     number;    // eviction window; default 6
+  repoTargets:              RepoTarget[];  // Tier 1 from BITBUCKET_PROJECTS
+  bitbucketProjectKeys:     string[];      // Tier 2 from BITBUCKET_PROJECT_KEYS
+  aiInsightsEnabled:        boolean;
+  aiProvider:               'anthropic' | 'openai' | 'gemini';
+  aiApiKey:                 string;
+  syncDeveloperIds:         string[];  // from SYNC_DEVELOPER_IDS
+  syncIntervalMinutes:      number;    // from SYNC_INTERVAL_MINUTES; 0 = disabled
+  specMetricsEnabled:       boolean;   // SPEC_METRICS_ENABLED; default false
+  specApprovedStatus:       string;    // SPEC_APPROVED_STATUS; default 'spec approved'
+  specVerificationStatus:   string;    // SPEC_VERIFICATION_STATUS; default 'verification'
+  specDoneStatus:           string;    // SPEC_DONE_STATUS; default 'done'
+  specBlockedStatus:        string;    // SPEC_BLOCKED_STATUS; default 'blocked'
 }
 ```
 
@@ -196,6 +202,7 @@ Exports `atlassianGet<T>` and `atlassianPost<T>`. On non-2xx, maps the Axios err
 |---|---|---|
 | `searchIssuesByAssignees(devIds, start, end)` | `POST /rest/api/2/search` | `startAt` loop until `startAt >= total` |
 | `getIssuesByKeys(keys[])` | `POST /rest/api/2/search` | Same |
+| `getIssueChangelog(issueKey)` | `GET /rest/api/2/issue/{key}?expand=changelog` | Single issue; no pagination — returns full history in one response. Returns `null` on error. Used only when `SPEC_METRICS_ENABLED=true`. |
 
 JQL for assignee search:
 ```
@@ -251,7 +258,8 @@ Per developer (all four fetches run in parallel via `Promise.all`):
 7. **PR bundles** — for each authored PR, fetch `activities` + `diff` + `commitCount` via `getCachedPRDetails`.
 8. **Metric computation** — purely functional helpers called per PR, then averaged.
 9. **Work type** — each Jira issue classified and counted.
-10. **Display name** — resolved from first PR's `author.user.displayName`, fallback to `getUserDisplayName(devId)`.
+10. **Spec-driven metrics** (when `specMetricsEnabled`) — fetches each linked issue's changelog via `getIssueChangelog`, calls `computeSpecMetrics` per issue, then `aggregateSpecMetrics` to produce the developer-level summary. Issues where the changelog fetch fails are silently skipped.
+11. **Display name** — resolved from first PR's `author.user.displayName`, fallback to `getUserDisplayName(devId)`.
 
 ### 2.8 Metric functions
 
@@ -289,6 +297,32 @@ Input type `PRQualityInput` (exported from `codeQuality.ts`): `{ activities, lin
 Exact `issuetype.name.toLowerCase()` lookup in a static map.
 If not found, scans label strings for bug/debt keywords.
 Default: `'features'`.
+
+#### `specMetrics.ts`
+
+**`computeSpecMetrics(issue, postMergeCommitMessages)`**
+
+1. Sorts the `changelog.histories` array by `created` ascending to build an ordered list of status transitions.
+2. Extracts the first timestamp for each of the four configured status names (`specApprovedStatus`, `specVerificationStatus`, `specDoneStatus`, `specBlockedStatus`) using `firstTransitionToMs`.
+3. Computes the three phase durations using `computeCycleTimeHrs` (same leave-adjusted working-hours logic as cycle time).
+4. Scans all transitions where `fromStatus === specBlockedStatus` and sums the working hours of each window for `clarificationDelayHrs`.
+5. Counts transitions where `fromStatus === specVerificationStatus` and `toStatus` is not `done`/`verification` for `specRegressions`.
+6. Applies `/\b(fix spec|per feedback|scoping change|spec fix|clarif|revert spec|spec update|per review)\b/i` against `postMergeCommitMessages` for `postMergeReworkCommits`.
+7. Computes `specAdherenceScore = max(0, 100 − round(100 × (1 − 2^−regressions)) − min(reworkCommits × 5, 40))`.
+
+**`aggregateSpecMetrics(perIssue[])`**
+
+Averages phased times and adherence score; sums regressions and rework commits; sets `firstPassYield = totalRegressions === 0 && totalPostMergeCommits === 0`.
+
+**`AppConfig` additions (all from env vars):**
+
+| Field | Env var | Default |
+|---|---|---|
+| `specMetricsEnabled` | `SPEC_METRICS_ENABLED` | `false` |
+| `specApprovedStatus` | `SPEC_APPROVED_STATUS` | `spec approved` |
+| `specVerificationStatus` | `SPEC_VERIFICATION_STATUS` | `verification` |
+| `specDoneStatus` | `SPEC_DONE_STATUS` | `done` |
+| `specBlockedStatus` | `SPEC_BLOCKED_STATUS` | `blocked` |
 
 ### 2.9 Routing & validation — `WEB/routes/metricsRouter.ts`
 
@@ -522,8 +556,22 @@ Key `AggregatedDeveloperMetric` fields:
 | `codeQuality.criticalScore` | `number \| null` | `null` when no Jira issues exist in the period — excluded from composite |
 | `codeQuality.approvalScore` | `number \| null` | `null` when no merged PRs exist — excluded from composite |
 | `codeQuality.prFocusScore` | `number \| null` | `null` when no merged PRs exist — excluded from composite |
+| `specMetrics` | `SpecDrivenMetrics \| undefined` | Present only when `SPEC_METRICS_ENABLED=true`; `undefined` otherwise |
 
 The UI renders `null` sub-scores as **N/A** with a greyed-out bar, rather than 0.
+
+`SpecDrivenMetrics` fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `specDefinitionTimeHrs` | `number` | 0 if spec-approved status never reached |
+| `implementationTimeHrs` | `number` | 0 if verification status never reached |
+| `verificationTimeHrs` | `number` | 0 if done status never reached |
+| `clarificationDelayHrs` | `number` | Sum across all blocked visits |
+| `specRegressions` | `number` | Total per developer (sum, not average) |
+| `postMergeReworkCommits` | `number` | Total per developer (sum, not average) |
+| `firstPassYield` | `boolean` | `true` only when both totals are 0 |
+| `specAdherenceScore` | `number` | 0–100; average of per-issue scores |
 
 ---
 

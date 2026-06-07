@@ -19,8 +19,9 @@ interface SyncPageState {
   selectedUsers:  string[];
   selectedProject: string;
   scheduleOption: ScheduleOption;
+  scheduledTime:  string; // HH:MM; only used when scheduleOption is daily/weekly
   purgeLogsOnRun: boolean;
-  confirmed:       boolean;   // true = user reviewed summary and clicked Confirm
+  confirmed:       boolean;
   isLoadingStatus: boolean;
   isLoadingLogs:   boolean;
   isSaving:        boolean;
@@ -35,6 +36,7 @@ const initialState: SyncPageState = {
   selectedUsers:   [],
   selectedProject: '',
   scheduleOption:  'now',
+  scheduledTime:   '',
   purgeLogsOnRun:  false,
   confirmed:       false,
   isLoadingStatus: true,
@@ -53,6 +55,7 @@ type Action =
   | { type: 'SET_SELECTED_USERS'; payload: string[] }
   | { type: 'SET_PROJECT';        payload: string }
   | { type: 'SET_SCHEDULE';       payload: ScheduleOption }
+  | { type: 'SET_SCHEDULED_TIME'; payload: string }
   | { type: 'SET_PURGE';          payload: boolean }
   | { type: 'SET_CONFIRMED';      payload: boolean }
   | { type: 'SAVE_START' }
@@ -70,6 +73,7 @@ function reducer(state: SyncPageState, action: Action): SyncPageState {
     case 'SET_SELECTED_USERS': return { ...state, selectedUsers: action.payload, confirmed: false };
     case 'SET_PROJECT':        return { ...state, selectedProject: action.payload, confirmed: false };
     case 'SET_SCHEDULE':       return { ...state, scheduleOption: action.payload, confirmed: false };
+    case 'SET_SCHEDULED_TIME': return { ...state, scheduledTime: action.payload, confirmed: false };
     case 'SET_PURGE':          return { ...state, purgeLogsOnRun: action.payload };
     case 'SET_CONFIRMED':      return { ...state, confirmed: action.payload };
     case 'SAVE_START':         return { ...state, isSaving: true, error: null };
@@ -163,6 +167,10 @@ export function useSync() {
     dispatch({ type: 'SET_SCHEDULE', payload: opt });
   }, []);
 
+  const setScheduledTime = useCallback((time: string) => {
+    dispatch({ type: 'SET_SCHEDULED_TIME', payload: time });
+  }, []);
+
   const setPurgeLogsOnRun = useCallback((val: boolean) => {
     dispatch({ type: 'SET_PURGE', payload: val });
   }, []);
@@ -172,7 +180,7 @@ export function useSync() {
   }, []);
 
   const saveAndRun = useCallback(async () => {
-    const { selectedUsers, scheduleOption, purgeLogsOnRun } = state;
+    const { selectedUsers, scheduleOption, scheduledTime, purgeLogsOnRun } = state;
     if (selectedUsers.length === 0) {
       dispatch({ type: 'SET_ERROR', payload: 'Select at least one user before running.' });
       return;
@@ -186,9 +194,11 @@ export function useSync() {
 
       if (scheduleOption === 'daily' || scheduleOption === 'weekly') {
         const intervalMinutes = scheduleOption === 'daily' ? 1440 : 10080;
+        const body: Record<string, unknown> = { developerIds: selectedUsers, intervalMinutes };
+        if (scheduledTime) body.scheduledTime = scheduledTime;
         await apiFetch<SyncConfig>('/api/dashboard/sync/config', {
           method: 'POST',
-          body: JSON.stringify({ developerIds: selectedUsers, intervalMinutes }),
+          body: JSON.stringify(body),
         });
       }
 
@@ -212,6 +222,7 @@ export function useSync() {
     setSelectedUsers,
     setSelectedProject,
     setScheduleOption,
+    setScheduledTime,
     setPurgeLogsOnRun,
     setConfirmed,
     saveAndRun,

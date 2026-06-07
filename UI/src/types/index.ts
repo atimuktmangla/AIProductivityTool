@@ -108,11 +108,13 @@ export interface SyncStatus {
   totalSyncUsers:   number;
   configuredUsers:  string[];
   intervalMinutes:  number;
+  scheduledTime:    string; // HH:MM (24h); empty = no wall-clock alignment
 }
 
 export interface SyncConfig {
   developerIds:    string[];
   intervalMinutes: number;
+  scheduledTime?:  string; // HH:MM (24h); optional
 }
 
 export interface SyncBatchLog {

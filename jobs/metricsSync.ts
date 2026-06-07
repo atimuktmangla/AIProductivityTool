@@ -1,9 +1,8 @@
-import { join } from 'node:path';
-import { readdir } from 'node:fs/promises';
 import { getConfig } from '../BL/config/env.js';
 import { aggregateMetrics } from '../BL/metrics/aggregator.js';
 import { setCachedMetrics } from '../DB/cache/metricsCache.js';
-import { readJsonCache, writeJsonCache, removeCacheDir } from '../DB/cache/jsonFileCache.js';
+import { readJsonCache } from '../DB/cache/jsonFileCache.js';
+import { getDb } from '../DB/store/inMemoryDb.js';
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -16,8 +15,10 @@ let completedUsers:   string[] = [];
 let failedUsers:      string[] = [];
 let totalSyncUsers:   number = 0;
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let timeoutHandle:  ReturnType<typeof setTimeout>  | null = null;
 let configuredUsers:    string[] = [];
 let configuredInterval: number   = 0;
+let configuredTime:     string   = ''; // HH:MM (24h); empty = no wall-clock alignment
 
 const BATCH_SIZE = 10;
 
@@ -34,6 +35,7 @@ export interface SyncStatus {
   totalSyncUsers:   number;
   configuredUsers:  string[];
   intervalMinutes:  number;
+  scheduledTime:    string; // HH:MM (24h); empty = no wall-clock alignment
 }
 
 export interface SyncBatchLog {
@@ -58,9 +60,29 @@ export interface SyncRunLog {
 interface SyncConfig {
   developerIds:    string[];
   intervalMinutes: number;
+  scheduledTime?:  string; // HH:MM (24h local time); optional
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Returns ms until the next occurrence of HH:MM local time.
+ * If that time has already passed today, returns ms until tomorrow's occurrence.
+ */
+function msUntilScheduledTime(hhmm: string): number {
+  const [hh, mm] = hhmm.split(':').map(Number);
+  const now  = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+  if (next.getTime() <= now.getTime()) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.getTime() - now.getTime();
+}
+
+function clearHandles(): void {
+  if (intervalHandle !== null) { clearInterval(intervalHandle); intervalHandle = null; }
+  if (timeoutHandle  !== null) { clearTimeout(timeoutHandle);   timeoutHandle  = null; }
+}
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -89,17 +111,15 @@ function syncConfigPath(): string {
   return 'data/sync-config.json';
 }
 
-function syncLogsDir(): string {
-  return 'data/sync-logs';
-}
-
 async function readSyncConfig(): Promise<SyncConfig | null> {
   return readJsonCache<SyncConfig>(syncConfigPath());
 }
 
-async function writeRunLog(log: SyncRunLog): Promise<void> {
-  const path = join(syncLogsDir(), `${log.runId}.json`);
-  await writeJsonCache<SyncRunLog>(path, log);
+export async function writeRunLog(log: SyncRunLog): Promise<void> {
+  const db = getDb();
+  db.prepare(
+    'INSERT OR REPLACE INTO sync_run_logs (run_id, started_at, finished_at, duration_ms, total_users, batches_json) VALUES (?,?,?,?,?,?)',
+  ).run(log.runId, log.startedAt, log.finishedAt, log.durationMs, log.totalUsers, JSON.stringify(log.batches));
 }
 
 // ── Core sync ─────────────────────────────────────────────────────────────────
@@ -212,6 +232,7 @@ export function getSyncStatus(): SyncStatus {
     totalSyncUsers,
     configuredUsers,
     intervalMinutes: configuredInterval,
+    scheduledTime:   configuredTime,
   };
 }
 
@@ -222,93 +243,112 @@ export function triggerSyncForUsers(developerIds: string[]): void {
   runSync(developerIds).catch((e) => console.error('[sync] trigger error:', e));
 }
 
-/** Replaces the running schedule. Pass intervalMinutes=0 to stop recurring syncs. */
-export function rescheduleInterval(intervalMinutes: number, developerIds: string[]): void {
-  if (intervalHandle !== null) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
-  }
+/**
+ * Replaces the running schedule. Pass intervalMinutes=0 to stop recurring syncs.
+ * When scheduledTime (HH:MM, 24h local) is provided the first run is delayed until
+ * that wall-clock time; subsequent runs fire every intervalMinutes thereafter so they
+ * stay aligned to the same time each day/week even after a server restart.
+ */
+export function rescheduleInterval(
+  intervalMinutes: number,
+  developerIds: string[],
+  scheduledTime = '',
+): void {
+  clearHandles();
   configuredUsers    = developerIds;
   configuredInterval = intervalMinutes;
+  configuredTime     = scheduledTime;
   nextRunAt          = null;
 
-  if (intervalMinutes > 0 && developerIds.length > 0) {
-    const ms = intervalMinutes * 60 * 1000;
+  if (intervalMinutes <= 0 || developerIds.length === 0) return;
+
+  const ms = intervalMinutes * 60 * 1000;
+
+  const startRecurring = () => {
     nextRunAt = Date.now() + ms;
     intervalHandle = setInterval(() => {
       nextRunAt = Date.now() + ms;
       runSync().catch((e) => console.error('[sync] interval error:', e));
     }, ms);
+  };
+
+  if (scheduledTime) {
+    const delay = msUntilScheduledTime(scheduledTime);
+    nextRunAt   = Date.now() + delay;
+    console.log(`[sync] rescheduled every ${intervalMinutes} min at ${scheduledTime} for ${developerIds.length} users (first run in ${Math.round(delay / 60_000)} min)`);
+    timeoutHandle = setTimeout(() => {
+      timeoutHandle = null;
+      runSync().catch((e) => console.error('[sync] scheduled error:', e));
+      startRecurring();
+    }, delay);
+  } else {
     console.log(`[sync] rescheduled every ${intervalMinutes} min for ${developerIds.length} users`);
+    startRecurring();
   }
 }
 
 /**
- * Returns the list of run log files, newest first, up to maxCount.
+ * Returns the last maxCount run logs ordered by startedAt descending.
  */
 export async function listRunLogs(maxCount = 50): Promise<SyncRunLog[]> {
-  const dir = syncLogsDir();
-  let files: string[];
-  try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    files = entries
-      .filter((e) => e.isFile() && e.name.endsWith('.json'))
-      .map((e) => e.name)
-      .sort()
-      .reverse()
-      .slice(0, maxCount);
-  } catch {
-    return [];
-  }
-
-  const logs: SyncRunLog[] = [];
-  for (const file of files) {
-    const log = await readJsonCache<SyncRunLog>(join(dir, file));
-    if (log) logs.push(log);
-  }
-  return logs;
+  type Row = { run_id: string; started_at: string; finished_at: string; duration_ms: number; total_users: number; batches_json: string };
+  const rows = getDb()
+    .prepare<[number], Row>('SELECT * FROM sync_run_logs ORDER BY started_at DESC LIMIT ?')
+    .all(maxCount);
+  return rows.map((r) => ({
+    runId:      r.run_id,
+    startedAt:  r.started_at,
+    finishedAt: r.finished_at,
+    durationMs: r.duration_ms,
+    totalUsers: r.total_users,
+    batches:    JSON.parse(r.batches_json) as SyncBatchLog[],
+  }));
 }
 
 /**
- * Deletes all run log files.
+ * Removes all run log entries from the in-memory store.
  */
 export async function purgeRunLogs(): Promise<void> {
-  await removeCacheDir(syncLogsDir());
+  getDb().prepare('DELETE FROM sync_run_logs').run();
 }
 
 /**
- * Starts the background metrics sync job.
- * Runs once immediately on startup (after 5 s), then every syncIntervalMinutes.
- * Reads data/sync-config.json on each tick to pick up runtime config changes.
- * No-op when both SYNC_DEVELOPER_IDS and sync-config.json are empty.
+ * Starts the background metrics sync job on server startup.
+ * - When scheduledTime is set: waits until that wall-clock time for the first run,
+ *   then repeats every intervalMinutes (stays aligned to the same time after restarts).
+ * - When no scheduledTime: runs once after 5 s, then every intervalMinutes.
+ * No-op when developer IDs or interval are not configured.
  */
 export async function startMetricsSyncJob(): Promise<void> {
-  // Prefer persisted config file; fall back to env
   const fileConfig  = await readSyncConfig();
   const envConfig   = getConfig();
-  const devIds      = fileConfig?.developerIds ?? envConfig.syncDeveloperIds;
+  const devIds      = fileConfig?.developerIds    ?? envConfig.syncDeveloperIds;
   const intervalMin = fileConfig?.intervalMinutes ?? envConfig.syncIntervalMinutes;
+  const schedTime   = fileConfig?.scheduledTime   ?? '';
 
   configuredUsers    = devIds;
   configuredInterval = intervalMin;
+  configuredTime     = schedTime;
 
   if (devIds.length === 0 || intervalMin <= 0) {
     console.log('[sync] disabled (no developer IDs or interval configured)');
     return;
   }
 
-  console.log(`[sync] scheduled every ${intervalMin} min for ${devIds.length} users`);
-
-  // Run once on startup after a short delay
-  setTimeout(() => {
-    runSync().catch((e) => console.error('[sync] startup error:', e));
-  }, 5_000);
-
-  // Recurring schedule
-  const ms = intervalMin * 60 * 1000;
-  nextRunAt = Date.now() + ms + 5_000;
-  intervalHandle = setInterval(() => {
-    nextRunAt = Date.now() + ms;
-    runSync().catch((e) => console.error('[sync] interval error:', e));
-  }, ms);
+  if (schedTime) {
+    // Wall-clock alignment: no immediate startup run — wait for the scheduled time.
+    rescheduleInterval(intervalMin, devIds, schedTime);
+  } else {
+    // Legacy behaviour: fire once after 5 s, then on the interval.
+    console.log(`[sync] scheduled every ${intervalMin} min for ${devIds.length} users`);
+    const ms = intervalMin * 60 * 1000;
+    nextRunAt = Date.now() + ms + 5_000;
+    setTimeout(() => {
+      runSync().catch((e) => console.error('[sync] startup error:', e));
+    }, 5_000);
+    intervalHandle = setInterval(() => {
+      nextRunAt = Date.now() + ms;
+      runSync().catch((e) => console.error('[sync] interval error:', e));
+    }, ms);
+  }
 }

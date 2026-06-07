@@ -17,6 +17,7 @@ const ALLOWED_INTERVALS = new Set([0, 1440, 10080]);
 interface SyncConfigFile {
   developerIds:    string[];
   intervalMinutes: number;
+  scheduledTime?:  string; // HH:MM (24h local); optional
 }
 
 // ── GET /status ───────────────────────────────────────────────────────────────
@@ -61,7 +62,7 @@ syncRouter.get('/config', async (_req: Request, res: Response, next: NextFunctio
 
 syncRouter.post('/config', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body as { developerIds?: unknown; intervalMinutes?: unknown };
+    const body = req.body as { developerIds?: unknown; intervalMinutes?: unknown; scheduledTime?: unknown };
 
     const idErr = validateDeveloperIds(body.developerIds);
     if (idErr) { res.status(400).json({ error: idErr }); return; }
@@ -72,13 +73,22 @@ syncRouter.post('/config', async (req: Request, res: Response, next: NextFunctio
       return;
     }
 
+    const rawTime = typeof body.scheduledTime === 'string' ? body.scheduledTime.trim() : '';
+    if (rawTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(rawTime)) {
+      res.status(400).json({ error: 'scheduledTime must be HH:MM in 24-hour format (e.g. "02:00")' });
+      return;
+    }
+    // scheduledTime only meaningful when interval is set
+    const scheduledTime = intervalMinutes > 0 ? rawTime : '';
+
     const config: SyncConfigFile = {
-      developerIds:    body.developerIds as string[],
+      developerIds: body.developerIds as string[],
       intervalMinutes,
+      ...(scheduledTime ? { scheduledTime } : {}),
     };
 
     await writeJsonCache<SyncConfigFile>(SYNC_CONFIG_PATH, config);
-    rescheduleInterval(intervalMinutes, config.developerIds);
+    rescheduleInterval(intervalMinutes, config.developerIds, scheduledTime);
     res.json(config);
   } catch (e) {
     next(e);

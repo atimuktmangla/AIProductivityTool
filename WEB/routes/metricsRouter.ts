@@ -6,7 +6,7 @@ import { generateInsightsSummary } from '../../AI/skills/insightsSummary.js';
 import { metricsRateLimiter } from '../guardrails/rateLimiter.js';
 import { sanitiseMetricsPayload } from '../guardrails/sanitiser.js';
 import { getConfig } from '../../BL/config/env.js';
-import { getCachedMetrics } from '../../DB/cache/metricsCache.js';
+import { getCachedMetrics, setCachedMetrics } from '../../DB/cache/metricsCache.js';
 import type { DashboardQueryPayload, MetricsResult } from '../../types/index.js';
 
 const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // serve pre-computed results for up to 1 hour
@@ -94,6 +94,8 @@ metricsRouter.post(
           // Partial hit — compute only the missing developers, then merge
           const partial = await aggregateMetrics({ ...payload, developerIds: misses });
           validateMetrics(partial.current);
+          // Cache the newly computed developers so subsequent requests are full hits
+          await setCachedMetrics(misses, payload.startDate, payload.endDate, partial.current);
           const merged = [...hits, ...partial.current];
           const result: MetricsResult = { current: merged, cacheStatus: 'partial', cachedAt: oldestCachedAt };
           const { aiInsightsEnabled } = getConfig();
@@ -107,6 +109,13 @@ metricsRouter.post(
 
       // Eval — sanity-check output; warnings are logged, never block the response
       validateMetrics(result.current);
+
+      // Populate SQLite cache with the live result so the next identical request
+      // is served instantly. Skip for compare-period requests (cache key is date-
+      // range only; compare data would be stale on a subsequent non-compare call).
+      if (!payload.compareStartDate) {
+        await setCachedMetrics(payload.developerIds, payload.startDate, payload.endDate, result.current);
+      }
 
       // Attach AI insights when enabled — failures fall back to rule-based silently
       const { aiInsightsEnabled } = getConfig();

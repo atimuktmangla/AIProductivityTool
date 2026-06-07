@@ -169,6 +169,7 @@ export function SyncPage() {
     setSelectedUsers,
     setSelectedProject,
     setScheduleOption,
+    setScheduledTime,
     setPurgeLogsOnRun,
     setConfirmed,
     saveAndRun,
@@ -176,7 +177,7 @@ export function SyncPage() {
 
   const {
     status, logs, mode, selectedUsers, selectedProject,
-    scheduleOption, purgeLogsOnRun, confirmed,
+    scheduleOption, scheduledTime, purgeLogsOnRun, confirmed,
     isLoadingStatus, isLoadingLogs, isSaving, error,
   } = state;
 
@@ -252,6 +253,7 @@ export function SyncPage() {
                 {status && status.intervalMinutes > 0 && (
                   <span className="sync-status-card__interval">
                     — {status.intervalMinutes === 1440 ? 'Daily' : 'Weekly'}
+                    {status.scheduledTime && ` at ${status.scheduledTime}`}
                   </span>
                 )}
               </div>
@@ -397,6 +399,27 @@ export function SyncPage() {
             </label>
           ))}
         </div>
+
+        {scheduleOption !== 'now' && (
+          <div className="sync-schedule__time-row">
+            <label className="sync-schedule__time-label" htmlFor="sync-scheduled-time">
+              Run at (local time):
+            </label>
+            <input
+              id="sync-scheduled-time"
+              type="time"
+              className="sync-schedule__time-input"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              placeholder="HH:MM"
+            />
+            <span className="sync-schedule__time-hint">
+              {scheduledTime
+                ? `First run at ${scheduledTime} local time`
+                : 'Leave blank to run immediately then repeat on interval'}
+            </span>
+          </div>
+        )}
       </section>
 
       {/* ── Config summary + confirm ─────────────────────────────────────── */}
@@ -421,7 +444,11 @@ export function SyncPage() {
             </div>
             <div className="sync-summary-card__row">
               <span className="sync-summary-card__label">Schedule</span>
-              <span className="sync-summary-card__value">{scheduleLabel(scheduleOption)}</span>
+              <span className="sync-summary-card__value">
+                {scheduleLabel(scheduleOption)}
+                {scheduleOption !== 'now' && scheduledTime && ` — first run at ${scheduledTime} local time`}
+                {scheduleOption !== 'now' && !scheduledTime && ' — starts immediately'}
+              </span>
             </div>
             <div className="sync-summary-card__row">
               <span className="sync-summary-card__label">Processing</span>
