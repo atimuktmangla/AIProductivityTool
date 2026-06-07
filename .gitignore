@@ -1,0 +1,73 @@
+# ─── Environment & secrets ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+**/.env
+.mcp.json
+
+# ─── Node ────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Root lock file excluded — was generated against an internal package registry.
+# Run `npm install` in the repo root to regenerate it from the public registry.
+package-lock.json
+
+# ─── Build output ────────────────────────────────────────────────────────────
+dist/
+UI/dist/
+
+# ─── Runtime data ────────────────────────────────────────────────────────────
+data/
+
+# ─── TypeScript ──────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── Editors ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Coverage ────────────────────────────────────────────────────────────────
+coverage/
+UI/coverage/
+.nyc_output/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Tooling ─────────────────────────────────────────────────────────────────
+.code-review-graph/
+.codesight/
+.claude/
+
+# auto:superpowers start — engine state, safe to keep ignored
+**/.auto/
+# auto:superpowers end
+
+
+# Node dependencies
+node_modules/
+dist/
+build/
+
+# Python virtual environments (Very common culprits for thousands of files)
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# IDEs and tools
+.idea/
+.vscode/
+.cursor/

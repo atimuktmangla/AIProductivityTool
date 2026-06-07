@@ -1,0 +1,323 @@
+# Functional Specification — AI Productivity Tool
+
+**Version:** 1.4
+**Date:** 2026-06-06
+**Audience:** Product owners, engineering leads, QA
+
+> **Requirement IDs** — every testable requirement carries a `REQ-<section>-<n>` tag.
+> Tests must reference the relevant ID via a `// @req REQ-*` comment.
+> Run `npm run test:trace` to verify full coverage.
+
+---
+
+## 1. Purpose
+
+The AI Productivity Tool is an internal dashboard that aggregates developer activity data from on-premises Jira Server and Bitbucket Server to give engineering managers objective, data-backed visibility into individual and team productivity across the software development lifecycle (SDLC).
+
+---
+
+## 2. Scope
+
+### In scope
+
+- Per-developer commit counts and lines changed
+- PR cycle time, pickup delay, and review lifecycle (working hours, leave-adjusted)
+- Review depth (human reviewer actions per PR)
+- Jira work-type classification (Features, Bugs, Infra & Tech Debt)
+- Code quality composite score (0–100) derived from critical/security resolution, approval rate, PR focus, and rework stability
+- Date-range filtering with preset shortcuts
+- User selection from the live Bitbucket user directory
+- Project and repository selection with three-tier auto-discovery fallback
+- Sortable contributor leaderboard with click-through PR detail drawer
+- Work-type donut chart and bar chart
+- Code quality radar chart and per-developer score bars
+- Period-over-period delta comparison
+- **Background sync job** with admin UI for scheduling, triggering, and monitoring
+- **Per-developer JSON file cache** with partial cache hit merging for sub-second report loads
+
+### Out of scope
+
+- External static analysis tools (SonarQube, ESLint) or code smells
+- Sprint velocity or velocity trending
+- Individual performance ratings or HR integration
+- Real-time (sub-minute) updates
+
+---
+
+## 3. Users
+
+| Persona             | Needs                                                                 |
+| ------------------- | --------------------------------------------------------------------- |
+| Engineering Manager | Understand team throughput and bottlenecks across a sprint or quarter |
+| Tech Lead           | Spot slow review cycles or uneven workload distribution               |
+| Developer           | See their own contribution data in context of the team                |
+
+---
+
+## 4. Functional requirements
+
+### 4.1 User selection
+
+<!-- REQ-4.1-1 --> The user picker loads all accounts from `GET /rest/api/1.0/admin/users` on mount.
+<!-- REQ-4.1-2 --> Users are displayed with avatar initials and display name.
+<!-- REQ-4.1-3 --> The list is searchable by display name or username slug.
+<!-- REQ-4.1-4 --> A "Select all" button selects all currently filtered users.
+<!-- REQ-4.1-5 --> The Run Report button is disabled until at least one user is selected.
+
+### 4.2 Date range selection
+
+<!-- REQ-4.2-1 --> Default range: last 30 days.
+<!-- REQ-4.2-2 --> Preset shortcuts: Last 30 days, Current Quarter, Last 90 days.
+<!-- REQ-4.2-3 --> Custom date inputs accept any YYYY-MM-DD range.
+<!-- REQ-4.2-4 --> `endDate` must be ≥ `startDate`; the backend returns HTTP 400 otherwise.
+
+### 4.3 Repository targeting
+
+Repositories to scan are resolved via a three-tier priority system:
+
+| Tier                   | Source                                                              | Behaviour                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 — Exact**          | UI `repoTargets` (projectKey+repoSlug pairs), or `BITBUCKET_PROJECTS` env var | Uses the listed `PROJECT/repo` pairs directly — no Bitbucket discovery calls                                                                              |
+| **2 — Project-scoped** | UI `projectKeys` only, or `BITBUCKET_PROJECT_KEYS` env var      | Lists all repos in those projects via Bitbucket API, then filters to repos where the developer has a commit or merged PR in the date window                             |
+| **3 — Auto-discover**  | Nothing provided                                                | Fetches each developer's recently-active repos via `/rest/api/1.0/profile/recent/repos`; falls back to scanning all visible projects if the profile API returns nothing |
+
+<!-- REQ-4.3-1 --> UI values always override env values. See [api-usecases.md](api-usecases.md) for concrete examples.
+
+### 4.4 Metrics computation
+
+#### 4.4.1 Commits
+
+<!-- REQ-4.4.1-1 --> Source: `GET /rest/api/1.0/projects/{key}/repos/{slug}/commits?author={slug}`
+<!-- REQ-4.4.1-2 --> Date filtering applied in-memory on `authorTimestamp` (Bitbucket date params accept only commit SHAs, not dates).
+<!-- REQ-4.4.1-3 --> All resolved repos are scanned per developer.
+
+#### 4.4.2 Pull Requests
+
+<!-- REQ-4.4.2-1 --> Source: `GET /rest/api/1.0/projects/{key}/repos/{slug}/pull-requests?state=MERGED`
+<!-- REQ-4.4.2-2 --> Filtered to PRs authored by the developer whose `createdDate` falls within the selected window.
+
+#### 4.4.3 PRs reviewed
+
+<!-- REQ-4.4.3-1 --> Source: `GET .../pull-requests?state=MERGED&role=PARTICIPANT&username={slug}`. Counts merged PRs authored by others where the developer participated as reviewer, commenter, approver, or merger.
+<!-- REQ-4.4.3-2 --> Own PRs (where `pr.author.user.name === developerSlug`) are excluded.
+<!-- REQ-4.4.3-3 --> The count is deduplicated by PR id across all resolved repos.
+
+#### 4.4.4 Jira issue linking
+
+Issues are sourced two ways:
+
+<!-- REQ-4.4.4-1 --> **Assignee search** via JQL (see section 4.4.4a).
+<!-- REQ-4.4.4-2 --> **Commit message extraction** — regex `/([A-Z]+-\d+)/g` applied to every commit message; matched keys fetched directly from Jira.
+<!-- REQ-4.4.4-3 --> Both result sets are merged and deduplicated by issue key.
+
+##### 4.4.4a Assignee JQL
+
+```
+assignee in ("slug1","slug2")
+AND development[pullrequests].all > 0
+AND updated >= "YYYY-MM-DD"
+AND updated <= "YYYY-MM-DD"
+ORDER BY updated DESC
+```
+
+#### 4.4.5 Cycle time
+
+<!-- REQ-4.4.5-1 --> Working hours elapsed from PR `createdDate` to `closedDate`, counting only Monday through Friday, 09:00–17:00 local time.
+<!-- REQ-4.4.5-2 --> Discounted by **12.64%** to account for 2.75 leave/holiday days per resource per month. Formula: `effectiveHours = rawWorkingHours × (1 − 33/261)`.
+<!-- REQ-4.4.5-3 --> Reported as an average across all merged PRs for the developer.
+<!-- REQ-4.4.5-4 --> Returns 0 when there are no merged PRs or when `closedDate` is null.
+
+#### 4.4.6 Pickup delay
+
+<!-- REQ-4.4.6-1 --> Working hours from PR `createdDate` to the `createdDate` of the first activity event by a non-author, non-bot reviewer.
+<!-- REQ-4.4.6-2 --> Bot accounts matched by: `/sonarqube|jenkins|deploymentbot|renovate|dependabot|buildbot|ci-bot/i`
+
+#### 4.4.7 Review lifecycle
+
+<!-- REQ-4.4.7-1 --> Working hours from the first `COMMENTED` activity by a non-author, non-bot user to PR `closedDate`.
+
+#### 4.4.8 Review depth
+
+<!-- REQ-4.4.8-1 --> Count of `COMMENTED`, `REVIEWED`, or `APPROVED` activity events by non-author, non-bot accounts. Averaged across all PRs.
+
+#### 4.4.9 Code quality score
+
+A composite 0–100 score from four equal-weighted signals (25% each), derived entirely from data already collected in the pipeline — no new API calls.
+
+| Signal                         | Weight | Source        | Formula                                                                                                                                                                                                       |
+| ------------------------------ | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critical / Security resolution | 25%    | Jira issues   | Effective resolution rate with a **2.5× multiplier** for BlackDuck, CVE, customer-reported, RCA, or incident tickets. Rewards high-risk firefighting; does not penalise developers assigned to security work. |
+| Approval rate                  | 25%    | PR activities | % of merged PRs approved by a human within a 24-hour SLA. Rubber-stamp approvals (< 5 min + zero reviewer comments) count as 50%.                                                                             |
+| PR focus                       | 25%    | PR diff stats | Sigmoid decay: `round(100 / (1 + e^((avgLines − 500) / 100)))`. ≤ 200 lines ≈ 100, 500 lines = 50, ≥ 800 lines ≈ 0. A 1-line security fix scores the same as a clean 200-line feature.                        |
+| Low rework & stability         | 25%    | PR activities | Exponential penalty on RESCOPED events per PR: `round(100 × 2^(−avgRescopedPerPR))`. 0 rescopes = 100; penalty doubles every additional rescope.                                                              |
+
+<!-- REQ-4.4.9-1 --> `composite = round(criticalScore × 0.25 + approvalScore × 0.25 + prFocusScore × 0.25 + reworkScore × 0.25)`
+<!-- REQ-4.4.9-2 --> No issues → `criticalScore = null` (signal excluded from composite). No PRs → `approvalScore = null` and `prFocusScore = null`.
+<!-- REQ-4.4.9-3 --> Critical/security issues (BlackDuck, CVE, customer-reported, RCA, incident labels) carry a **2.5× weight** in the resolution denominator.
+<!-- REQ-4.4.9-4 --> Human approval within 24 h SLA with at least one reviewer comment → full credit (100). Approval in < 5 min with zero reviewer comments → rubber stamp → 50 credit. Approval outside 24 h → zero credit.
+<!-- REQ-4.4.9-5 --> Bot and self-approvals are excluded from the approval rate.
+<!-- REQ-4.4.9-6 --> PR focus score: sigmoid `round(100 / (1 + e^((lines − 500) / 100)))`. ≤ 200 lines ≥ 93, 500 lines = 50, ≥ 800 lines ≤ 7.
+<!-- REQ-4.4.9-7 --> Rework score: `round(100 × 2^(−avgRescopedPerPR))`. 0 rescopes = 100; 1 rescope/PR = 50.
+<!-- REQ-4.4.9-8 --> **Bug ratio** (`bugs / totalIssues`) is returned as an informational field only — not included in the composite.
+<!-- REQ-4.4.9-9 --> Rating bands: **Good** ≥ 75 · **Fair** 50–74 · **Needs work** < 50.
+
+#### 4.4.10 Work-type classification
+
+| Jira `issuetype.name`                                                                   | Maps to       |
+| --------------------------------------------------------------------------------------- | ------------- |
+| New Feature, Story, Feature, Epic, Improvement, Enhancement                             | `features`    |
+| Bug, Defect, Hotfix, Incident                                                           | `bugs`        |
+| Technical Task, Task, Sub-task, Tech Debt, Maintenance, Infrastructure, Refactor, Chore | `infraOrDebt` |
+
+<!-- REQ-4.4.10-1 --> Type names are matched case-insensitively.
+<!-- REQ-4.4.10-2 --> Label-based fallback: scans issue labels for bug/infra keywords if the issue type is unrecognised.
+<!-- REQ-4.4.10-3 --> Unrecognised type with no matching labels defaults to `features`.
+
+### 4.5 Dashboard sections
+
+| Section                  | Content                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Throughput Overview      | KPI cards: total commits, lines added, lines deleted, avg cycle time                                     |
+| Workflow Cycle Track     | Stage pipeline with colour-coded performance ratings; bar chart when >1 developer selected               |
+| Code Quality Score       | Team average gauge, radar chart (critical / approval / PR focus / rework axes), per-developer score bars |
+| Jira Category Allocation | Donut chart + horizontal bar chart with percentage breakdown                                             |
+| Team Contributors        | Sortable table with columns: commits, lines +/-, PRs reviewed, cycle time, pickup delay, review lifecycle, review depth, work type, quality score; sparklines and quality badge per row |
+
+### 4.6 Skeleton loading
+
+<!-- REQ-4.6-1 --> All metric sections display animated skeleton placeholders while `isLoading === true`, preventing layout shift.
+
+### 4.7 Error handling
+
+<!-- REQ-4.7-1 --> Upstream Jira/Bitbucket 401/403 → `502 Bad Gateway` with credential hint.
+<!-- REQ-4.7-2 --> Upstream 5xx → `502 Bad Gateway` with upstream detail.
+<!-- REQ-4.7-3 --> Validation failure → `400 Bad Request` with field description.
+<!-- REQ-4.7-4 --> All other errors → `500 Internal Server Error`.
+
+### 4.8 Sync job admin
+
+#### 4.8.1 Purpose
+
+<!-- REQ-4.8.1-1 --> A background sync job pre-computes and caches metrics for a configured set of users on a repeating schedule. Once synced, dashboard queries load from per-developer cache files instantly without hitting Bitbucket or Jira APIs.
+
+#### 4.8.2 User selection modes
+
+The Sync Jobs tab offers three modes:
+
+| Mode | Behaviour |
+|------|-----------|
+| **All users** | Auto-fetches the full Bitbucket user directory and selects all |
+| **By project** | Shows project pills; user selects one project, then a user picker loads all users for refinement |
+| **Select manually** | Standard user picker with search and multi-select |
+
+#### 4.8.3 Schedule options
+
+| Option | Effect |
+|--------|--------|
+| Run once now | Triggers an immediate sync with no recurring schedule |
+| Daily (every 24 h) | Saves `intervalMinutes: 1440` to `data/sync-config.json` and schedules a `setInterval` |
+| Weekly (every 7 d) | Saves `intervalMinutes: 10080` to `data/sync-config.json` |
+
+<!-- REQ-4.8.3-1 --> The schedule survives server restarts: `startMetricsSyncJob()` reads `data/sync-config.json` on startup and resumes the interval.
+
+#### 4.8.4 Run logs
+
+<!-- REQ-4.8.4-1 --> Each sync run writes a structured JSON log to `data/sync-logs/{YYYY-MM-DD-HH-mm-ss}.json` with fields: `runId`, `startedAt`, `finishedAt`, `durationMs`, `totalUsers`, and per-batch entries (`batchIndex`, `userIds`, `durationMs`, `status`, optional `error`).
+<!-- REQ-4.8.4-2 --> The Run History table shows the last 50 runs with expandable per-batch detail rows. Green left border for fully successful runs, red for any batch error.
+
+#### 4.8.5 Purge logs
+
+<!-- REQ-4.8.5-1 --> A "Purge run logs before starting" checkbox calls `DELETE /api/dashboard/sync/logs` before triggering the sync, removing all files in `data/sync-logs/`.
+
+#### 4.8.6 Cache freshness indicator
+
+<!-- REQ-4.8.6-1 --> When results include data from the sync cache, a green banner reads "Served from sync cache · synced {date}". Banner includes a "Manage sync jobs →" link to the Sync Jobs tab.
+<!-- REQ-4.8.6-2 --> For partial hits, the banner reads "Partial cache hit — some developers loaded live".
+
+### 4.9 Input validation
+
+<!-- REQ-4.9-1 --> `developerIds` array must have at least 1 and at most 50 entries; exceeding 50 returns HTTP 400.
+<!-- REQ-4.9-2 --> Date range must not exceed 366 days; exceeding returns HTTP 400.
+<!-- REQ-4.9-3 --> Leading/trailing whitespace in `developerIds` entries is trimmed before processing.
+
+---
+
+## 5. Non-functional requirements
+
+| Requirement           | Target                                                                     |
+| --------------------- | -------------------------------------------------------------------------- |
+| Response time (live)  | < 30 s for a 7-developer, 90-day query over 5 repos                        |
+| Response time (cache) | < 500 ms for any team size when all developers are in the sync cache       |
+| Concurrency           | Per-developer and per-PR API calls parallelised via `Promise.all`          |
+| Cache scalability     | One JSON file per (devId, startDate, endDate) — scales to hundreds of devs without contention |
+| SSL                   | Self-signed on-prem certificates tolerated via `rejectUnauthorized: false` |
+| Auth                  | Bearer token (PAT) — no OAuth flow required                                |
+| TypeScript strictness | `"strict": true` in both backend and frontend                              |
+| UI theme              | Dark theme (background `#1a1d27`) with CSS custom properties; all colour values via semantic tokens |
+
+---
+
+## 6. Data flow
+
+### 6.1 Ad-hoc report (live computation)
+
+```
+Browser
+  │  POST /api/dashboard/metrics  { developerIds, startDate, endDate, ... }
+  ▼
+Express Router (metricsRouter)
+  │  validatePayload() → getCachedMetrics() → check hits/misses
+  │
+  ├── Full cache hit → return hits immediately (cacheStatus: 'full')
+  ├── Partial hit    → aggregateMetrics(misses only) → merge with hits (cacheStatus: 'partial')
+  └── Cache miss     → aggregateMetrics(all devs)
+        │
+        ▼
+      Aggregator (per developer, parallel)
+        ├── Bitbucket: getCommitsByAuthor() → extract Jira keys from messages
+        ├── Jira: searchIssuesByAssignees() + getIssuesByKeys() → merge + dedup
+        ├── Bitbucket: getMergedPullRequestsByAuthor() → filter by author + date
+        ├── Bitbucket: getMergedPRsParticipatedByUser() → PRs reviewed (role=PARTICIPANT, excl. own)
+        └── per PR (parallel): getPRActivities() + getPRDiffStat()
+              └── computeCycleTimeHrs / computePickupDelayHrs / computeReviewLifecycleHrs
+                  computeReviewDepth / classifyWorkType
+        ▼
+      AggregatedDeveloperMetric[] → setCachedMetrics() → JSON response
+```
+
+### 6.2 Background sync job
+
+```
+setInterval (daily/weekly) or POST /sync/trigger
+  │
+  ▼
+metricsSync.runSync(developerIds)
+  │  reads data/sync-config.json at each tick (overrides env vars)
+  │
+  ├── For each batch of 10 users (parallel):
+  │     aggregateMetrics(batch) → setCachedMetrics(batch)
+  │     writes data/cache/metrics-result/{devId}__{start}__{end}.json
+  │
+  └── writes data/sync-logs/{YYYY-MM-DD-HH-mm-ss}.json
+        (runId, startedAt, finishedAt, durationMs, totalUsers, batches[])
+```
+
+---
+
+## 7. API contract
+
+See [../README.md](../README.md#api-endpoints) for full request/response schemas.
+
+---
+
+## 8. Configuration reference
+
+See [../README.md](../README.md#configuration) for all environment variables.
+
+---
+
+## 9. Known limitations
+
+- The Bitbucket `/commits` endpoint does not support date-range params; all commits are fetched newest-first and scanned until the start date, which may be slow on repos with very long histories.
+- The Jira `development[pullrequests].all > 0` JQL filter requires the Jira DVCS connector to be configured on the Jira instance.
+- Tier-3 auto-discovery relies on `/profile/recent/repos`, which only returns repos the user has recently pushed to — very old repos may be missed without Tier-1 or Tier-2 configuration.

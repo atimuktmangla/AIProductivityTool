@@ -1,0 +1,18 @@
+{
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.git/**",
+    "**/venv/**",
+    "**/.venv/**",
+    "**/build/**"
+  ],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.git/**",
+    "**/venv/**",
+    "**/.venv/**",
+    "**/build/**"
+  ]
+}

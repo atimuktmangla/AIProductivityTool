@@ -1,0 +1,36 @@
+{
+  "name": "ai-productivity-tool",
+  "version": "1.0.0",
+  "description": "Developer metrics backend for on-prem Jira Server and Bitbucket Server",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run && tsx scripts/check-traceability.ts",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:trace": "tsx scripts/check-traceability.ts",
+    "test:ui": "cd UI && npm test"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/helmet": "^0.0.48",
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.7",
+    "supertest": "^7.2.2",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2",
+    "vitest": "^3.2.4"
+  }
+}
