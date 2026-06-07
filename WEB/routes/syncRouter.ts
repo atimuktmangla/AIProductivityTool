@@ -45,7 +45,12 @@ syncRouter.post('/trigger', async (req: Request, res: Response, next: NextFuncti
 
 syncRouter.get('/config', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const file = await readJsonCache<SyncConfigFile>(SYNC_CONFIG_PATH);
+    let file: SyncConfigFile | null = null;
+    try {
+      file = await readJsonCache<SyncConfigFile>(SYNC_CONFIG_PATH);
+    } catch {
+      // Unreadable or corrupt config — fall through to env fallback
+    }
     if (file) {
       res.json(file);
       return;
