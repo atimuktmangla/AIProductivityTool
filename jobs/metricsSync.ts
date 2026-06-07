@@ -10,7 +10,7 @@ let running            = false;
 let lastRunAt:   number | null = null;
 let nextRunAt:   number | null = null;
 let runStartedAt: number | null = null;
-let currentUser:      string | null = null;
+let activeUsers:      string[] = [];
 let completedUsers:   string[] = [];
 let failedUsers:      string[] = [];
 let totalSyncUsers:   number = 0;
@@ -20,7 +20,7 @@ let configuredUsers:    string[] = [];
 let configuredInterval: number   = 0;
 let configuredTime:     string   = ''; // HH:MM (24h); empty = no wall-clock alignment
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 6;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ export interface SyncStatus {
   lastRunAt:        number | null;
   nextRunAt:        number | null;
   runStartedAt:     number | null;
-  currentUser:      string | null;
+  activeUsers:      string[];
   completedUsers:   string[];
   failedUsers:      string[];
   totalSyncUsers:   number;
@@ -141,7 +141,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
   running = true;
   const startedAt = Date.now();
   runStartedAt    = startedAt;
-  currentUser     = null;
+  activeUsers     = [];
   completedUsers  = [];
   failedUsers     = [];
   totalSyncUsers  = developerIds.length;
@@ -156,31 +156,36 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
   const batchLogs: SyncBatchLog[] = [];
 
   try {
-    // Process users one at a time so currentUser / completedUsers stay accurate.
-    // Per-user API calls (commits, PRs, activities) remain internally parallel inside aggregateMetrics.
+    // Process each batch of 6 users in parallel; batches run sequentially.
     for (let i = 0; i < chunks.length; i++) {
       const batch      = chunks[i];
       const batchStart = Date.now();
-      const batchUserLogs: Array<{ userId: string; status: 'ok' | 'error'; error?: string }> = [];
 
-      for (const userId of batch) {
-        currentUser = userId;
-        const userStart = Date.now();
-        console.log(`[sync] user ${userId} (${completedUsers.length + failedUsers.length + 1}/${developerIds.length}) — start`);
+      console.log(`[sync] batch ${i + 1}/${chunks.length} — ${batch.length} users in parallel`);
 
-        try {
+      const results = await Promise.allSettled(
+        batch.map(async (userId) => {
+          const userStart = Date.now();
+          console.log(`[sync] user ${userId} — start`);
           const result = await aggregateMetrics({ developerIds: [userId], startDate, endDate });
           await setCachedMetrics([userId], startDate, endDate, result.current);
-          completedUsers = [...completedUsers, userId];
           console.log(`[sync] user ${userId} — done in ${((Date.now() - userStart) / 1000).toFixed(1)}s`);
-          batchUserLogs.push({ userId, status: 'ok' });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+          return userId;
+        }),
+      );
+
+      const batchUserLogs: Array<{ userId: string; status: 'ok' | 'error'; error?: string }> = results.map((r, idx) => {
+        const userId = batch[idx];
+        if (r.status === 'fulfilled') {
+          completedUsers = [...completedUsers, userId];
+          return { userId, status: 'ok' as const };
+        } else {
+          const message = r.reason instanceof Error ? r.reason.message : String(r.reason);
           failedUsers = [...failedUsers, userId];
-          console.error(`[sync] user ${userId} — failed in ${((Date.now() - userStart) / 1000).toFixed(1)}s:`, message);
-          batchUserLogs.push({ userId, status: 'error', error: message });
+          console.error(`[sync] user ${userId} — failed:`, message);
+          return { userId, status: 'error' as const, error: message };
         }
-      }
+      });
 
       const durationMs    = Date.now() - batchStart;
       const batchHasError = batchUserLogs.some((u) => u.status === 'error');
@@ -214,7 +219,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
   } finally {
     running        = false;
     runStartedAt   = null;
-    currentUser    = null;
+    activeUsers    = [];
   }
 }
 
@@ -226,7 +231,7 @@ export function getSyncStatus(): SyncStatus {
     lastRunAt,
     nextRunAt,
     runStartedAt,
-    currentUser,
+    activeUsers:     [...activeUsers],
     completedUsers:  [...completedUsers],
     failedUsers:     [...failedUsers],
     totalSyncUsers,

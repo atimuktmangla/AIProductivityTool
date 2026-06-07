@@ -102,7 +102,7 @@ export interface SyncStatus {
   lastRunAt:        number | null;
   nextRunAt:        number | null;
   runStartedAt:     number | null;
-  currentUser:      string | null;
+  activeUsers:      string[];
   completedUsers:   string[];
   failedUsers:      string[];
   totalSyncUsers:   number;

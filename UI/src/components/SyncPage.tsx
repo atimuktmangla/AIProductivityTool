@@ -296,9 +296,9 @@ export function SyncPage() {
                     <span className="sync-progress-card__failed"> + {status.failedUsers.length} failed</span>
                   )}
                   <span className="sync-progress-card__total"> of {status.totalSyncUsers} users completed</span>
-                  {status.currentUser && (
+                  {status.activeUsers.length > 0 && (
                     <span className="sync-progress-card__current">
-                      &nbsp;— <strong>{status.currentUser}</strong> in progress
+                      &nbsp;— <strong>{status.activeUsers.length}</strong> in progress
                     </span>
                   )}
                 </div>
@@ -312,11 +312,11 @@ export function SyncPage() {
                     {status.failedUsers.map((u) => (
                       <span key={u} className="sync-progress-chip sync-progress-chip--failed">{u}</span>
                     ))}
-                    {status.currentUser && (
-                      <span className="sync-progress-chip sync-progress-chip--active">
-                        &#9654; {status.currentUser}
+                    {status.activeUsers.map((u) => (
+                      <span key={u} className="sync-progress-chip sync-progress-chip--active">
+                        &#9654; {u}
                       </span>
-                    )}
+                    ))}
                   </div>
                 )}
               </>
