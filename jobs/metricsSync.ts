@@ -164,11 +164,18 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
       activeUsers = [...batch];
       console.log(`[sync] batch ${i + 1}/${chunks.length} — ${batch.length} users in parallel`);
 
+      const USER_TIMEOUT_MS = 5 * 60_000; // 5 minutes per user
       const results = await Promise.allSettled(
         batch.map(async (userId) => {
           const userStart = Date.now();
           console.log(`[sync] user ${userId} — start`);
-          const result = await aggregateMetrics({ developerIds: [userId], startDate, endDate });
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`timed out after ${USER_TIMEOUT_MS / 60_000} min`)), USER_TIMEOUT_MS),
+          );
+          const result = await Promise.race([
+            aggregateMetrics({ developerIds: [userId], startDate, endDate }),
+            timeout,
+          ]);
           await setCachedMetrics([userId], startDate, endDate, result.current);
           console.log(`[sync] user ${userId} — done in ${((Date.now() - userStart) / 1000).toFixed(1)}s`);
           return userId;
