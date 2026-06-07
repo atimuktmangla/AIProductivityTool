@@ -161,6 +161,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
       const batch      = chunks[i];
       const batchStart = Date.now();
 
+      activeUsers = [...batch];
       console.log(`[sync] batch ${i + 1}/${chunks.length} — ${batch.length} users in parallel`);
 
       const results = await Promise.allSettled(
@@ -174,6 +175,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
         }),
       );
 
+      activeUsers = [];
       const batchUserLogs: Array<{ userId: string; status: 'ok' | 'error'; error?: string }> = results.map((r, idx) => {
         const userId = batch[idx];
         if (r.status === 'fulfilled') {

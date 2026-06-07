@@ -173,6 +173,7 @@ export function SyncPage() {
     setPurgeLogsOnRun,
     setConfirmed,
     saveAndRun,
+    refreshStatus,
   } = useSync();
 
   const {
@@ -275,6 +276,13 @@ export function SyncPage() {
                   {status.runStartedAt ? <ElapsedTimer startMs={status.runStartedAt} /> : '—'}
                 </strong>
               </span>
+              <button
+                className="sync-progress-card__refresh-btn"
+                onClick={() => { void refreshStatus(); }}
+                title="Refresh status"
+              >
+                ↻ Refresh
+              </button>
             </div>
 
             {status.totalSyncUsers > 0 && (
@@ -303,20 +311,25 @@ export function SyncPage() {
                   )}
                 </div>
 
-                {/* Completed users chips */}
-                {status.completedUsers.length > 0 && (
+                {/* Completed users chips — last 50 */}
+                {(status.completedUsers.length > 0 || status.failedUsers.length > 0 || status.activeUsers.length > 0) && (
                   <div className="sync-progress-card__chips">
-                    {status.completedUsers.map((u) => (
-                      <span key={u} className="sync-progress-chip sync-progress-chip--done">{u}</span>
-                    ))}
-                    {status.failedUsers.map((u) => (
-                      <span key={u} className="sync-progress-chip sync-progress-chip--failed">{u}</span>
-                    ))}
                     {status.activeUsers.map((u) => (
                       <span key={u} className="sync-progress-chip sync-progress-chip--active">
                         &#9654; {u}
                       </span>
                     ))}
+                    {status.failedUsers.map((u) => (
+                      <span key={u} className="sync-progress-chip sync-progress-chip--failed">{u}</span>
+                    ))}
+                    {status.completedUsers.slice(-50).map((u) => (
+                      <span key={u} className="sync-progress-chip sync-progress-chip--done">{u}</span>
+                    ))}
+                    {status.completedUsers.length > 50 && (
+                      <span className="sync-progress-chip sync-progress-chip--overflow">
+                        +{status.completedUsers.length - 50} more
+                      </span>
+                    )}
                   </div>
                 )}
               </>
