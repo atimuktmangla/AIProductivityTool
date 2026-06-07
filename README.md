@@ -445,3 +445,4 @@ Both must pass with zero errors before opening a PR.
 2. Run `npx tsc --noEmit` in both root and `UI/` — zero errors required
 3. Run `npm run build` (root) and `cd UI && npm run build` — both must pass
 4. Open a PR targeting `main`
+"# AIProductivityTool" 
