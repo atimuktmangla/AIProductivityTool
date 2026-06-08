@@ -1,8 +1,10 @@
 import { getConfig } from '../BL/config/env.js';
 import { aggregateMetrics } from '../BL/metrics/aggregator.js';
-import { setCachedMetrics } from '../DB/cache/metricsCache.js';
+import { getCachedMetrics, setCachedMetrics } from '../DB/cache/metricsCache.js';
 import { readJsonCache } from '../DB/cache/jsonFileCache.js';
 import { getDb } from '../DB/store/inMemoryDb.js';
+
+export const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches dashboard TTL
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -46,6 +48,20 @@ export interface SyncBatchLog {
   durationMs:  number;
   status:      'ok' | 'error';
   error?:      string;
+  source?:     'live' | 'cache'; // present when runSync() processed this batch
+}
+
+export interface CacheCoverage {
+  configuredUsers: number;
+  cachedUsers:     number;
+  uncachedUsers:   string[];
+  staleUsers:      string[];
+}
+
+export interface WarmupResult {
+  skipped:     number;
+  queued:      number;
+  queuedUsers: string[];
 }
 
 export interface SyncRunLog {
@@ -90,7 +106,7 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function dateRange(): { startDate: string; endDate: string } {
+export function dateRange(): { startDate: string; endDate: string } {
   const end   = new Date();
   const start = new Date(end);
   start.setDate(start.getDate() - 90);
@@ -167,6 +183,17 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
       const USER_TIMEOUT_MS = 5 * 60_000; // 5 minutes per user
       const results = await Promise.allSettled(
         batch.map(async (userId) => {
+          // Cache-skip: promote fresh cache hits without calling the upstream API
+          try {
+            const { hits } = await getCachedMetrics([userId], startDate, endDate, METRICS_CACHE_TTL_MS);
+            if (hits.length > 0) {
+              console.log(`[sync] user ${userId} — cache hit, skipping fetch`);
+              return { userId, source: 'cache' as const };
+            }
+          } catch {
+            // Fail-open: if the cache check throws, fall through to a live fetch
+          }
+
           const userStart = Date.now();
           console.log(`[sync] user ${userId} — start`);
           const timeout = new Promise<never>((_, reject) =>
@@ -178,16 +205,16 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
           ]);
           await setCachedMetrics([userId], startDate, endDate, result.current);
           console.log(`[sync] user ${userId} — done in ${((Date.now() - userStart) / 1000).toFixed(1)}s`);
-          return userId;
+          return { userId, source: 'live' as const };
         }),
       );
 
       activeUsers = [];
-      const batchUserLogs: Array<{ userId: string; status: 'ok' | 'error'; error?: string }> = results.map((r, idx) => {
+      const batchUserLogs: Array<{ userId: string; status: 'ok' | 'error'; source?: 'live' | 'cache'; error?: string }> = results.map((r, idx) => {
         const userId = batch[idx];
         if (r.status === 'fulfilled') {
           completedUsers = [...completedUsers, userId];
-          return { userId, status: 'ok' as const };
+          return { userId, status: 'ok' as const, source: r.value.source };
         } else {
           const message = r.reason instanceof Error ? r.reason.message : String(r.reason);
           failedUsers = [...failedUsers, userId];
@@ -198,6 +225,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
 
       const durationMs    = Date.now() - batchStart;
       const batchHasError = batchUserLogs.some((u) => u.status === 'error');
+      const batchSource   = batchUserLogs.every((u) => u.source === 'cache') ? 'cache' : 'live';
       console.log(`[sync] batch ${i + 1}/${chunks.length} done in ${(durationMs / 1000).toFixed(1)}s`);
       batchLogs.push({
         batchIndex: i,
@@ -206,6 +234,7 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
         finishedAt: new Date().toISOString(),
         durationMs,
         status:     batchHasError ? 'error' : 'ok',
+        source:     batchSource,
         error:      batchHasError
           ? batchUserLogs.filter((u) => u.status === 'error').map((u) => `${u.userId}: ${u.error}`).join('; ')
           : undefined,
@@ -241,7 +270,7 @@ export function getSyncStatus(): SyncStatus {
     nextRunAt,
     runStartedAt,
     activeUsers:     [...activeUsers],
-    completedUsers:  [...completedUsers],
+    completedUsers:  completedUsers.slice(-50),
     failedUsers:     [...failedUsers],
     totalSyncUsers,
     configuredUsers,

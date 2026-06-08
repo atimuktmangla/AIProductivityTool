@@ -1,5 +1,5 @@
 import { useReducer, useCallback, useEffect, useRef } from 'react';
-import type { SyncStatus, SyncConfig, SyncRunLog } from '../types/index.js';
+import type { SyncStatus, SyncConfig, SyncRunLog, CacheCoverage, WarmupResult } from '../types/index.js';
 
 const API_HEADERS = {
   'Content-Type': 'application/json',
@@ -15,6 +15,7 @@ interface SyncPageState {
   status:         SyncStatus | null;
   config:         SyncConfig | null;
   logs:           SyncRunLog[];
+  coverage:       CacheCoverage | null;
   mode:           UserSelectMode;
   selectedUsers:  string[];
   selectedProject: string;
@@ -25,6 +26,7 @@ interface SyncPageState {
   isLoadingStatus: boolean;
   isLoadingLogs:   boolean;
   isSaving:        boolean;
+  isWarmingUp:     boolean;
   error:           string | null;
 }
 
@@ -32,6 +34,7 @@ const initialState: SyncPageState = {
   status:          null,
   config:          null,
   logs:            [],
+  coverage:        null,
   mode:            'all',
   selectedUsers:   [],
   selectedProject: '',
@@ -42,6 +45,7 @@ const initialState: SyncPageState = {
   isLoadingStatus: true,
   isLoadingLogs:   true,
   isSaving:        false,
+  isWarmingUp:     false,
   error:           null,
 };
 
@@ -51,6 +55,7 @@ type Action =
   | { type: 'SET_STATUS';         payload: SyncStatus }
   | { type: 'SET_CONFIG';         payload: SyncConfig }
   | { type: 'SET_LOGS';           payload: SyncRunLog[] }
+  | { type: 'SET_COVERAGE';       payload: CacheCoverage }
   | { type: 'SET_MODE';           payload: UserSelectMode }
   | { type: 'SET_SELECTED_USERS'; payload: string[] }
   | { type: 'SET_PROJECT';        payload: string }
@@ -60,6 +65,8 @@ type Action =
   | { type: 'SET_CONFIRMED';      payload: boolean }
   | { type: 'SAVE_START' }
   | { type: 'SAVE_DONE' }
+  | { type: 'WARMUP_START' }
+  | { type: 'WARMUP_DONE' }
   | { type: 'SET_ERROR';          payload: string | null }
   | { type: 'STATUS_LOADED' }
   | { type: 'LOGS_LOADED' };
@@ -69,6 +76,7 @@ function reducer(state: SyncPageState, action: Action): SyncPageState {
     case 'SET_STATUS':         return { ...state, status: action.payload, isLoadingStatus: false };
     case 'SET_CONFIG':         return { ...state, config: action.payload };
     case 'SET_LOGS':           return { ...state, logs: action.payload, isLoadingLogs: false };
+    case 'SET_COVERAGE':       return { ...state, coverage: action.payload };
     case 'SET_MODE':           return { ...state, mode: action.payload, selectedUsers: [], selectedProject: '', confirmed: false };
     case 'SET_SELECTED_USERS': return { ...state, selectedUsers: action.payload, confirmed: false };
     case 'SET_PROJECT':        return { ...state, selectedProject: action.payload, confirmed: false };
@@ -78,7 +86,9 @@ function reducer(state: SyncPageState, action: Action): SyncPageState {
     case 'SET_CONFIRMED':      return { ...state, confirmed: action.payload };
     case 'SAVE_START':         return { ...state, isSaving: true, error: null };
     case 'SAVE_DONE':          return { ...state, isSaving: false, confirmed: false };
-    case 'SET_ERROR':          return { ...state, error: action.payload, isSaving: false };
+    case 'WARMUP_START':       return { ...state, isWarmingUp: true, error: null };
+    case 'WARMUP_DONE':        return { ...state, isWarmingUp: false };
+    case 'SET_ERROR':          return { ...state, error: action.payload, isSaving: false, isWarmingUp: false };
     case 'STATUS_LOADED':      return { ...state, isLoadingStatus: false };
     case 'LOGS_LOADED':        return { ...state, isLoadingLogs: false };
   }
@@ -129,12 +139,22 @@ export function useSync() {
     }
   }, []);
 
+  const fetchCoverage = useCallback(async () => {
+    try {
+      const coverage = await apiFetch<CacheCoverage>('/api/dashboard/sync/cache-coverage');
+      dispatch({ type: 'SET_COVERAGE', payload: coverage });
+    } catch {
+      // non-fatal — coverage card stays in skeleton state
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchStatus();
     fetchLogs();
     fetchConfig();
-  }, [fetchStatus, fetchLogs, fetchConfig]);
+    fetchCoverage();
+  }, [fetchStatus, fetchLogs, fetchConfig, fetchCoverage]);
 
   // Adaptive polling: 5 s while running, 30 s while idle
   useEffect(() => {
@@ -144,12 +164,13 @@ export function useSync() {
     pollRef.current = setInterval(() => {
       fetchStatus();
       fetchLogs();
+      fetchCoverage();
     }, interval);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [state.status?.running, fetchStatus, fetchLogs]);
+  }, [state.status?.running, fetchStatus, fetchLogs, fetchCoverage]);
 
   const setMode = useCallback((mode: UserSelectMode) => {
     dispatch({ type: 'SET_MODE', payload: mode });
@@ -216,6 +237,19 @@ export function useSync() {
     }
   }, [state, fetchStatus, fetchLogs]);
 
+  const warmupMissing = useCallback(async () => {
+    dispatch({ type: 'WARMUP_START' });
+    try {
+      await apiFetch<WarmupResult>('/api/dashboard/sync/warmup', { method: 'POST', body: '{}' });
+      await fetchStatus();
+      await fetchCoverage();
+    } catch (e) {
+      dispatch({ type: 'SET_ERROR', payload: e instanceof Error ? e.message : 'Warm-up failed' });
+    } finally {
+      dispatch({ type: 'WARMUP_DONE' });
+    }
+  }, [fetchStatus, fetchCoverage]);
+
   return {
     state,
     setMode,
@@ -226,6 +260,7 @@ export function useSync() {
     setPurgeLogsOnRun,
     setConfirmed,
     saveAndRun,
+    warmupMissing,
     refreshStatus: fetchStatus,
     refreshLogs:   fetchLogs,
   };

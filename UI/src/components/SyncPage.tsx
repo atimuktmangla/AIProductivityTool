@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSync } from '../hooks/useSync.js';
 import { UserPicker } from './UserPicker.js';
 import { Skeleton } from './Skeleton.js';
-import type { BitbucketUser } from '../types/index.js';
+import type { BitbucketUser, CacheCoverage } from '../types/index.js';
 
 const API_HEADERS = { 'X-Api-Key': import.meta.env.VITE_API_KEY as string };
 
@@ -160,6 +160,33 @@ function LogRow({ log }: { log: import('../types/index.js').SyncRunLog }) {
   );
 }
 
+// ── Cache coverage card ───────────────────────────────────────────────────────
+
+function CacheCoverageCard({ coverage }: { coverage: CacheCoverage | null }) {
+  if (!coverage) return <Skeleton width="100%" height="2.5rem" />;
+
+  if (coverage.configuredUsers === 0) {
+    return <p className="sync-user-area__hint">No users configured.</p>;
+  }
+
+  const uncached = coverage.uncachedUsers;
+  const shown    = uncached.slice(0, 5);
+  const overflow = uncached.length - shown.length;
+
+  return (
+    <div className="sync-coverage-card">
+      <span className="sync-coverage-card__ratio">
+        <strong>{coverage.cachedUsers}</strong> / {coverage.configuredUsers} users cached
+      </span>
+      {uncached.length > 0 && (
+        <span className="sync-coverage-card__missing">
+          {' '}— needs warming: {shown.join(', ')}{overflow > 0 ? ` +${overflow} more` : ''}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function SyncPage() {
@@ -173,13 +200,14 @@ export function SyncPage() {
     setPurgeLogsOnRun,
     setConfirmed,
     saveAndRun,
+    warmupMissing,
     refreshStatus,
   } = useSync();
 
   const {
-    status, logs, mode, selectedUsers, selectedProject,
+    status, logs, coverage, mode, selectedUsers, selectedProject,
     scheduleOption, scheduledTime, purgeLogsOnRun, confirmed,
-    isLoadingStatus, isLoadingLogs, isSaving, error,
+    isLoadingStatus, isLoadingLogs, isSaving, isWarmingUp, error,
   } = state;
 
   const isRunning = status?.running ?? false;
@@ -263,6 +291,28 @@ export function SyncPage() {
         </div>
       </section>
 
+      {/* ── Cache coverage ──────────────────────────────────────────────────── */}
+      <section className="sync-page__section">
+        <div className="sync-page__section-title">Cache Coverage</div>
+        <CacheCoverageCard coverage={coverage} />
+        {coverage && coverage.configuredUsers > 0 && (
+          <button
+            type="button"
+            className={`btn btn--secondary sync-warmup-btn${(isRunning || (coverage.uncachedUsers.length === 0 && coverage.staleUsers.length === 0) || isWarmingUp) ? ' btn--disabled' : ''}`}
+            disabled={isRunning || (coverage.uncachedUsers.length === 0 && coverage.staleUsers.length === 0) || isWarmingUp}
+            onClick={(!isRunning && (coverage.uncachedUsers.length > 0 || coverage.staleUsers.length > 0) && !isWarmingUp) ? () => { void warmupMissing(); } : undefined}
+            title={
+              isRunning     ? 'A sync is already running' :
+              isWarmingUp   ? 'Warm-up in progress…' :
+              (coverage.uncachedUsers.length === 0 && coverage.staleUsers.length === 0) ? 'All users are cached' :
+              undefined
+            }
+          >
+            {isWarmingUp ? 'Warming up…' : 'Warm Missing Cache'}
+          </button>
+        )}
+      </section>
+
       {/* ── Live progress panel (shown while running) ─────────────────────── */}
       {isRunning && status && (
         <section className="sync-page__section">
@@ -322,14 +372,9 @@ export function SyncPage() {
                     {status.failedUsers.map((u) => (
                       <span key={u} className="sync-progress-chip sync-progress-chip--failed">{u}</span>
                     ))}
-                    {status.completedUsers.slice(-50).map((u) => (
+                    {status.completedUsers.map((u) => (
                       <span key={u} className="sync-progress-chip sync-progress-chip--done">{u}</span>
                     ))}
-                    {status.completedUsers.length > 50 && (
-                      <span className="sync-progress-chip sync-progress-chip--overflow">
-                        +{status.completedUsers.length - 50} more
-                      </span>
-                    )}
                   </div>
                 )}
               </>

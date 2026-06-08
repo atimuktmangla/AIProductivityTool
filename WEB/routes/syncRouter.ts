@@ -6,7 +6,10 @@ import {
   rescheduleInterval,
   listRunLogs,
   purgeRunLogs,
+  dateRange,
+  METRICS_CACHE_TTL_MS,
 } from '../../jobs/metricsSync.js';
+import { getCachedMetrics } from '../../DB/cache/metricsCache.js';
 import { getConfig } from '../../BL/config/env.js';
 
 export const syncRouter = Router();
@@ -117,6 +120,85 @@ syncRouter.delete('/logs', async (_req: Request, res: Response, next: NextFuncti
   try {
     await purgeRunLogs();
     res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── GET /cache-coverage ───────────────────────────────────────────────────────
+
+syncRouter.get('/cache-coverage', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    let configuredUserIds: string[] = [];
+    try {
+      const file = await readJsonCache<{ developerIds: string[] }>(SYNC_CONFIG_PATH);
+      configuredUserIds = file?.developerIds ?? [];
+    } catch {
+      // Unreadable config — treat as no users
+    }
+
+    if (configuredUserIds.length === 0) {
+      res.json({ configuredUsers: 0, cachedUsers: 0, uncachedUsers: [], staleUsers: [] });
+      return;
+    }
+
+    const { startDate, endDate } = dateRange();
+    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_CACHE_TTL_MS);
+
+    // Stale = has an entry but it was filtered out as too old. We detect this by
+    // checking which misses still have *any* row (beyond maxAgeMs threshold).
+    // For simplicity we use a very large TTL to find entries that exist but are stale.
+    const VERY_OLD = Date.now(); // any entry that exists will be ≤ now
+    const { hits: allHits } = await getCachedMetrics(configuredUserIds, startDate, endDate, VERY_OLD);
+    const freshIds = new Set(hits.map((h) => h.developerId));
+    const anyIds   = new Set(allHits.map((h) => h.developerId));
+    const staleUsers    = misses.filter((id) => anyIds.has(id));
+    const uncachedUsers = misses.filter((id) => !anyIds.has(id));
+
+    res.json({
+      configuredUsers: configuredUserIds.length,
+      cachedUsers:     hits.length,
+      uncachedUsers,
+      staleUsers,
+    });
+    void freshIds; // used implicitly via the set construction above
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── POST /warmup ──────────────────────────────────────────────────────────────
+
+syncRouter.post('/warmup', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (getSyncStatus().running) {
+      res.status(409).json({ error: 'A sync is already running' });
+      return;
+    }
+
+    let configuredUserIds: string[] = [];
+    try {
+      const file = await readJsonCache<{ developerIds: string[] }>(SYNC_CONFIG_PATH);
+      configuredUserIds = file?.developerIds ?? [];
+    } catch {
+      // Unreadable config — treat as no users
+    }
+
+    if (configuredUserIds.length === 0) {
+      res.status(400).json({ error: 'No users configured' });
+      return;
+    }
+
+    const { startDate, endDate } = dateRange();
+    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_CACHE_TTL_MS);
+
+    if (misses.length === 0) {
+      res.status(200).json({ skipped: hits.length, queued: 0, queuedUsers: [] });
+      return;
+    }
+
+    triggerSyncForUsers(misses);
+    res.status(202).json({ skipped: hits.length, queued: misses.length, queuedUsers: misses });
   } catch (e) {
     next(e);
   }

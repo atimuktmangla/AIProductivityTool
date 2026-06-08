@@ -274,6 +274,12 @@ The Sync Jobs tab offers three modes:
 <!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `DB/store/inMemoryDb.ts`; all other modules import from there.
 <!-- REQ-4.12-5 --> After this migration the system MUST NOT write any new `data/cache/metrics-result/*.json` or `data/sync-logs/*.json` files. On first startup after deployment — detected by the absence of sentinel file `data/.migrated-to-sqlite` — the system MUST attempt to delete both legacy directories, log a one-time migration notice, write the sentinel file, and continue normally regardless of whether deletion succeeds (non-blocking; warn on failure). Subsequent startups skip the cleanup because the sentinel file is present.
 
+<!-- REQ-002-FR-001 --> The sync status endpoint MUST return at most 50 completed users (the most recent 50 by completion order) in the `completedUsers` field. The `totalSyncUsers` field MUST always reflect the true count of users in the run regardless of the cap. The `failedUsers` array MUST never be truncated.
+<!-- REQ-002-FR-003 --> When a manual sync run is triggered, the system MUST check the SQLite metrics cache for each user before calling the upstream metrics API. Users with a cache entry younger than 1 hour MUST be promoted to completed immediately without any upstream API call.
+<!-- REQ-002-FR-004 --> Cache-skipped users MUST be recorded in the batch log with `status: 'ok'` and a `source: 'cache'` field. Freshly fetched users MUST be recorded with `source: 'live'`. The `source` field is optional and absent on legacy run log rows.
+<!-- REQ-002-FR-005 --> The system MUST expose a `GET /api/dashboard/sync/cache-coverage` endpoint that returns, for all users configured in `sync-config.json`, a count of cached users, a count and list of uncached users (no entry for current date range), and a count and list of stale users (entry older than 1 hour). When no config file is present the endpoint returns all-zero counts.
+<!-- REQ-002-FR-006 --> The system MUST expose a `POST /api/dashboard/sync/warmup` endpoint that reads configured users from `sync-config.json`, identifies those without a fresh cache entry, and triggers a sync for only those users. If a sync is already running it MUST return HTTP 409. If no users are configured it MUST return HTTP 400. The response MUST include the counts of skipped (cached) and queued (warming) users and the list of queued user IDs.
+
 ---
 
 ## 5. Non-functional requirements

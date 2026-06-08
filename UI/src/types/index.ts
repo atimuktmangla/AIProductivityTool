@@ -125,6 +125,20 @@ export interface SyncBatchLog {
   durationMs:  number;
   status:      'ok' | 'error';
   error?:      string;
+  source?:     'live' | 'cache';
+}
+
+export interface CacheCoverage {
+  configuredUsers: number;
+  cachedUsers:     number;
+  uncachedUsers:   string[];
+  staleUsers:      string[];
+}
+
+export interface WarmupResult {
+  skipped:     number;
+  queued:      number;
+  queuedUsers: string[];
 }
 
 export interface SyncRunLog {

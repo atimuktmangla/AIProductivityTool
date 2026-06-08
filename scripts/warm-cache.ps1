@@ -1,0 +1,92 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Triggers a delta cache warm-up for the AI Productivity Tool.
+    Calls POST /api/dashboard/sync/warmup and prints a summary.
+    Exit code 0 = success (HTTP 2xx), Exit code 1 = error.
+
+.DESCRIPTION
+    Reads PORT and VITE_API_KEY from a .env file in the project root.
+    Falls back to localhost:3000 if the file is absent or the key is unset.
+
+.EXAMPLE
+    .\scripts\warm-cache.ps1
+#>
+
+param()
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# ── Resolve project root (one level up from scripts/) ────────────────────────
+$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptDir
+$envFile     = Join-Path $projectRoot '.env'
+
+# ── Parse .env file ───────────────────────────────────────────────────────────
+$port   = 3000
+$apiKey = ''
+
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -eq '' -or $line.StartsWith('#')) { return }
+        $parts = $line -split '=', 2
+        if ($parts.Length -ne 2) { return }
+        $key = $parts[0].Trim()
+        $val = $parts[1].Trim().Trim('"').Trim("'")
+        if ($key -eq 'PORT' -or $key -eq 'VITE_DEV_PORT') {
+            $parsed = 0
+            if ([int]::TryParse($val, [ref]$parsed) -and $parsed -gt 0) {
+                $port = $parsed
+            }
+        }
+        if ($key -eq 'VITE_API_KEY') {
+            $apiKey = $val
+        }
+    }
+} else {
+    Write-Warning "No .env file found at $envFile — using defaults (localhost:$port, no API key)"
+}
+
+# ── Call the warmup endpoint ──────────────────────────────────────────────────
+$url = "http://localhost:$port/api/dashboard/sync/warmup"
+
+try {
+    $headers = @{ 'Content-Type' = 'application/json' }
+    if ($apiKey -ne '') { $headers['X-Api-Key'] = $apiKey }
+
+    $response = Invoke-WebRequest `
+        -Uri $url `
+        -Method POST `
+        -Headers $headers `
+        -Body '{}' `
+        -UseBasicParsing `
+        -TimeoutSec 30
+
+    $body = $response.Content | ConvertFrom-Json
+
+    if ($body.queued -eq 0) {
+        Write-Host "Skipped: $($body.skipped) (cached). Queued: 0. Nothing to warm."
+    } else {
+        Write-Host "Skipped: $($body.skipped) (cached). Queued: $($body.queued)."
+    }
+    exit 0
+}
+catch [System.Net.WebException] {
+    $status = $null
+    if ($_.Exception.Response) {
+        $status = [int]$_.Exception.Response.StatusCode
+        $stream = $_.Exception.Response.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $errBody = $reader.ReadToEnd()
+        Write-Error "Error: HTTP $status — $errBody"
+    } else {
+        Write-Error "Error: Unable to connect to $url. Is the server running?"
+    }
+    exit 1
+}
+catch {
+    Write-Error "Error: $_"
+    exit 1
+}
