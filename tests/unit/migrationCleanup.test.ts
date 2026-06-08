@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // Mock jsonFileCache before importing the module under test
-vi.mock('../../DB/cache/jsonFileCache.js', () => ({
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
   readJsonCache:  vi.fn(),
   writeJsonCache: vi.fn().mockResolvedValue(undefined),
   removeCacheDir: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { readJsonCache, writeJsonCache, removeCacheDir } from '../../DB/cache/jsonFileCache.js';
-import { runMigrationCleanup } from '../../DB/store/migrationCleanup.js';
+import { readJsonCache, writeJsonCache, removeCacheDir } from '../../databaselayer/cache/jsonFileCache.js';
+import { runMigrationCleanup } from '../../databaselayer/store/migrationCleanup.js';
 
 const mockedRead   = vi.mocked(readJsonCache);
 const mockedWrite  = vi.mocked(writeJsonCache);

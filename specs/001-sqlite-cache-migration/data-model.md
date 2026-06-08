@@ -91,10 +91,10 @@ CREATE TABLE IF NOT EXISTS sync_run_logs (
 
 | Module | Responsibility |
 |---|---|
-| `DB/store/inMemoryDb.ts` | Singleton `Database` instance; schema initialisation; exported prepared statements or raw `db` handle. |
-| `DB/cache/metricsCache.ts` | `getCachedMetrics` / `setCachedMetrics` — read/write `metrics_cache` table. |
+| `databaselayer/store/inMemoryDb.ts` | Singleton `Database` instance; schema initialisation; exported prepared statements or raw `db` handle. |
+| `databaselayer/cache/metricsCache.ts` | `getCachedMetrics` / `setCachedMetrics` — read/write `metrics_cache` table. |
 | `jobs/metricsSync.ts` | `writeRunLog` / `listRunLogs` / `purgeRunLogs` — read/write `sync_run_logs` table. |
-| `DB/cache/jsonFileCache.ts` | Retained for `data/sync-config.json` reads/writes and sentinel file creation. No changes. |
+| `databaselayer/cache/jsonFileCache.ts` | Retained for `data/sync-config.json` reads/writes and sentinel file creation. No changes. |
 
 ---
 

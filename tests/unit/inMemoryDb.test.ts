@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, getDb, _resetForTesting, AppStoreNotInitialisedError } from '../../DB/store/inMemoryDb.js';
+import { initInMemoryDb, getDb, _resetForTesting, AppStoreNotInitialisedError } from '../../databaselayer/store/inMemoryDb.js';
 
 describe('inMemoryDb', () => {
   beforeEach(() => {

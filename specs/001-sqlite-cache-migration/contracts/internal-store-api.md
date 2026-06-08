@@ -3,11 +3,11 @@
 **Feature**: 001-sqlite-cache-migration  
 **Date**: 2026-06-07
 
-This document defines the TypeScript API contract for `DB/store/inMemoryDb.ts` — the new singleton module that owns the in-memory SQLite connection.
+This document defines the TypeScript API contract for `databaselayer/store/inMemoryDb.ts` — the new singleton module that owns the in-memory SQLite connection.
 
 ---
 
-## `DB/store/inMemoryDb.ts`
+## `databaselayer/store/inMemoryDb.ts`
 
 ### Exports
 
@@ -29,7 +29,7 @@ Drops and recreates all tables, then resets the `initialised` flag so `initInMem
 
 ---
 
-## `DB/cache/metricsCache.ts` — unchanged public signatures
+## `databaselayer/cache/metricsCache.ts` — unchanged public signatures
 
 These function signatures must not change (SC-003):
 

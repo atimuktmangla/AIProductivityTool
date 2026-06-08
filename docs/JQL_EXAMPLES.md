@@ -147,7 +147,7 @@ The tool's `workType.ts` classifier maps these exact strings (case-insensitive):
 | Bug, Defect, Hotfix, Incident | `bugs` |
 | Technical Task, Task, Sub-task, Tech Debt, Technical Debt, Maintenance, Infrastructure, Infra, Refactor, Chore | `infraOrDebt` |
 
-If your Jira instance uses a different name, add it to `BL/metrics/workType.ts` in the `TYPE_MAP` object.
+If your Jira instance uses a different name, add it to `backend/metrics/workType.ts` in the `TYPE_MAP` object.
 
 ---
 

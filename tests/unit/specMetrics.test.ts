@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeSpecMetrics, aggregateSpecMetrics } from '../../BL/metrics/specMetrics.js';
+import { computeSpecMetrics, aggregateSpecMetrics } from '../../backend/metrics/specMetrics.js';
 import type { JiraIssueWithChangelog } from '../../types/index.js';
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     specApprovedStatus:      'Spec Approved',
     specVerificationStatus:  'Verification',

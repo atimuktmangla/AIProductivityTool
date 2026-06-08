@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCycleTimeHrs } from '../../BL/metrics/cycleTime.js';
+import { computeCycleTimeHrs } from '../../backend/metrics/cycleTime.js';
 
 const LEAVE_DISCOUNT = 33 / 261;
 

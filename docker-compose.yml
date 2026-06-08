@@ -15,7 +15,7 @@ services:
 
   ui:
     build:
-      context: ./UI
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "5173:80"

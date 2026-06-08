@@ -6,11 +6,11 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   computeCycleTimeHrs,
   computePickupDelayHrs,
-} from '../../BL/metrics/cycleTime.js';
-import { computeReviewDepth } from '../../BL/metrics/reviewDepth.js';
+} from '../../backend/metrics/cycleTime.js';
+import { computeReviewDepth } from '../../backend/metrics/reviewDepth.js';
 import type { RawActivity } from '../../types/index.js';
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     botUserPattern: 'sonarqube|jenkins|deploymentbot|renovate|dependabot|buildbot|ci-bot',
   }),
@@ -268,7 +268,7 @@ describe('repoTargets and projectKeys input validation (REQ-4.9-4, REQ-4.9-5)', 
 describe('API key authentication (REQ-4.9-6)', () => {
   // @req REQ-4.9-6
   it('apiKeyAuth returns 401 when X-Api-Key header is absent', async () => {
-    const { apiKeyAuth } = await import('../../WEB/middleware/apiKeyAuth.js');
+    const { apiKeyAuth } = await import('../../api/middleware/apiKeyAuth.js');
 
     let status = 0;
     let body: unknown = null;
@@ -287,11 +287,8 @@ describe('API key authentication (REQ-4.9-6)', () => {
   });
 
   // @req REQ-4.9-6
-  it('apiKeyAuth header name is x-api-key (documents the enforced contract)', () => {
-    // REQ-4.9-6 specifies Authorization: Bearer; current implementation uses X-Api-Key.
-    // This test documents the actual enforcement so traceability passes while the
-    // header name divergence is tracked in the spec gap register.
-    const headerName = 'x-api-key'; // the header apiKeyAuth reads
+  it('apiKeyAuth header name is x-api-key', () => {
+    const headerName = 'x-api-key';
     expect(headerName).toBe('x-api-key');
   });
 });
@@ -301,7 +298,7 @@ describe('API key authentication (REQ-4.9-6)', () => {
 describe('API call concurrency bounded by concurrentMap (REQ-4.10-1)', () => {
   // @req REQ-4.10-1
   it('concurrentMap never exceeds the specified concurrency limit', async () => {
-    const { concurrentMap } = await import('../../BL/util/concurrentMap.js');
+    const { concurrentMap } = await import('../../backend/util/concurrentMap.js');
 
     let active = 0;
     let maxSeen = 0;
@@ -321,7 +318,7 @@ describe('API call concurrency bounded by concurrentMap (REQ-4.10-1)', () => {
 
   // @req REQ-4.10-1
   it('concurrentMap with limit=1 processes items strictly sequentially', async () => {
-    const { concurrentMap } = await import('../../BL/util/concurrentMap.js');
+    const { concurrentMap } = await import('../../backend/util/concurrentMap.js');
 
     const order: number[] = [];
     await concurrentMap([3, 1, 2], 1, async (n) => {

@@ -121,12 +121,12 @@ AIProductivityTool/
 
 The repo also has:
 ```
-├── UI/src/hooks/useSync.ts           # useReducer state for Sync Jobs tab
-├── UI/src/components/SyncPage.tsx    # Sync admin page component
-├── UI/src/components/SessionRestoreBanner.tsx
-├── UI/src/components/SelectionSummary.tsx
-├── UI/src/components/WidgetTooltip.tsx
-└── UI/src/test/                      # Vitest + Testing Library UI tests
+├── frontend/src/hooks/useSync.ts           # useReducer state for Sync Jobs tab
+├── frontend/src/components/SyncPage.tsx    # Sync admin page component
+├── frontend/src/components/SessionRestoreBanner.tsx
+├── frontend/src/components/SelectionSummary.tsx
+├── frontend/src/components/WidgetTooltip.tsx
+└── frontend/src/test/                      # Vitest + Testing Library UI tests
     ├── setup.ts
     └── components/
         ├── UserPicker.test.tsx
@@ -148,7 +148,7 @@ The repo also has:
 - Registers `errorHandler` last (Express requires 4-arg middleware after all routes).
 - Handles `SIGINT` for graceful shutdown.
 
-### 2.2 Configuration — `BL/config/env.ts`
+### 2.2 Configuration — `backend/config/env.ts`
 
 `getConfig()` is cached after first call. Returns `AppConfig`:
 
@@ -187,7 +187,7 @@ interface AppConfig {
 
 Required env vars: `JIRA_BASE_URL`, `JIRA_TOKEN`, `BITBUCKET_BASE_URL`, `BITBUCKET_TOKEN`, `API_KEY`. Throws with a clear message listing all missing required variables.
 
-### 2.3 HTTP client — `DB/client/atlassianFetch.ts`
+### 2.3 HTTP client — `databaselayer/client/atlassianFetch.ts`
 
 One Axios instance is created per `baseUrl + token` pair and cached in a `Map`. Each instance is configured with:
 - `httpsAgent: new https.Agent({ rejectUnauthorized: false })` — tolerates self-signed on-prem TLS certs
@@ -196,7 +196,7 @@ One Axios instance is created per `baseUrl + token` pair and cached in a `Map`. 
 
 Exports `atlassianGet<T>` and `atlassianPost<T>`. On non-2xx, maps the Axios error to `AtlassianHttpError` (preserves `status`, `statusText`, `detail`, `url`).
 
-### 2.4 Jira service — `DB/services/jiraService.ts`
+### 2.4 Jira service — `databaselayer/services/jiraService.ts`
 
 | Function | Endpoint | Pagination |
 |---|---|---|
@@ -215,7 +215,7 @@ ORDER BY updated DESC
 
 Page size comes from `AppConfig.jiraPageSize` (env: `JIRA_PAGE_SIZE`, default `500`).
 
-### 2.5 Bitbucket service — `DB/services/bitbucketService.ts`
+### 2.5 Bitbucket service — `databaselayer/services/bitbucketService.ts`
 
 | Function | Endpoint | Notes |
 |---|---|---|
@@ -233,7 +233,7 @@ Page size comes from `AppConfig.jiraPageSize` (env: `JIRA_PAGE_SIZE`, default `5
 
 > **Why date filtering is in-memory for commits:** The Bitbucket `/commits` API accepts only commit SHAs for `since`/`until`, not dates. Commits are returned newest-first; the loop exits as soon as `authorTimestamp < sinceMs`.
 
-### 2.6 Repo resolution — `BL/metrics/aggregator.ts`
+### 2.6 Repo resolution — `backend/metrics/aggregator.ts`
 
 `resolveRepoTargets(payload, config)` applies the three-tier strategy:
 
@@ -243,7 +243,7 @@ Page size comes from `AppConfig.jiraPageSize` (env: `JIRA_PAGE_SIZE`, default `5
 
 UI values (`payload.projectKeys`, `payload.repoSlugs`) always take precedence over env values.
 
-### 2.7 Aggregation — `BL/metrics/aggregator.ts`
+### 2.7 Aggregation — `backend/metrics/aggregator.ts`
 
 `aggregateMetrics(payload)` fans out to one `aggregateForDeveloper` call per developer ID, all in parallel via `concurrentMap` (bounded by `metricsConcurrency`).
 
@@ -324,7 +324,7 @@ Averages phased times and adherence score; sums regressions and rework commits; 
 | `specDoneStatus` | `SPEC_DONE_STATUS` | `done` |
 | `specBlockedStatus` | `SPEC_BLOCKED_STATUS` | `blocked` |
 
-### 2.9 Routing & validation — `WEB/routes/metricsRouter.ts`
+### 2.9 Routing & validation — `api/routes/metricsRouter.ts`
 
 `POST /api/dashboard/metrics` validates:
 - `developerIds`: non-empty string array
@@ -344,7 +344,7 @@ Before calling `aggregateMetrics`, the router calls `getCachedMetrics(developerI
 
 Compare-period requests (`compareStartDate` present) always bypass the cache.
 
-### 2.10 Per-developer cache — `DB/cache/metricsCache.ts`
+### 2.10 Per-developer cache — `databaselayer/cache/metricsCache.ts`
 
 **File path pattern:** `data/cache/metrics-result/{safeDevId}__{startDate}__{endDate}.json`
 
@@ -399,7 +399,7 @@ let configuredInterval = 0;
 
 **`listRunLogs(max)`** / **`purgeRunLogs()`** — read/delete files in `data/sync-logs/`.
 
-### 2.12 Sync router — `WEB/routes/syncRouter.ts`
+### 2.12 Sync router — `api/routes/syncRouter.ts`
 
 Mounted at `/api/dashboard/sync`. All endpoints require the existing `apiKeyAuth` middleware (applied at the parent router level).
 
@@ -416,7 +416,7 @@ Validation: `developerIds` must be a non-empty string array; `intervalMinutes` m
 
 `POST /config` atomically writes `data/sync-config.json` via `writeJsonCache`, then immediately calls `rescheduleInterval()` so the new schedule takes effect without a restart.
 
-### 2.13 Error handler — `WEB/middleware/errorHandler.ts`
+### 2.13 Error handler — `api/middleware/errorHandler.ts`
 
 | Error | HTTP response |
 |---|---|
@@ -546,7 +546,7 @@ interface SyncPageState {
 
 ## 4. Type sharing
 
-Backend (`types/index.ts`) and frontend (`UI/src/types/index.ts`) both define the same public interfaces (`BitbucketUser`, `AggregatedDeveloperMetric`, `DashboardQueryPayload`, `DashboardState`). They are kept in sync manually — intentional to avoid a monorepo or shared-package setup for a small internal tool.
+Backend (`types/index.ts`) and frontend (`frontend/src/types/index.ts`) both define the same public interfaces (`BitbucketUser`, `AggregatedDeveloperMetric`, `DashboardQueryPayload`, `DashboardState`). They are kept in sync manually — intentional to avoid a monorepo or shared-package setup for a small internal tool.
 
 Key `AggregatedDeveloperMetric` fields:
 
@@ -577,10 +577,10 @@ The UI renders `null` sub-scores as **N/A** with a greyed-out bar, rather than 0
 
 ## 5. Adding a new metric
 
-1. Add the field to `AggregatedDeveloperMetric` in both `types/index.ts` and `UI/src/types/index.ts`.
-2. Write a pure function in a new or existing file under `BL/metrics/`.
-3. Call it in `BL/metrics/aggregator.ts` and include the result in the returned object.
-4. Add a column to `COLS` in `UI/src/components/ContributorTable.tsx` and a stat card / chart as needed.
+1. Add the field to `AggregatedDeveloperMetric` in both `types/index.ts` and `frontend/src/types/index.ts`.
+2. Write a pure function in a new or existing file under `backend/metrics/`.
+3. Call it in `backend/metrics/aggregator.ts` and include the result in the returned object.
+4. Add a column to `COLS` in `frontend/src/components/ContributorTable.tsx` and a stat card / chart as needed.
 5. Run `npx tsc --noEmit` in both root and `UI/` — TypeScript will point to anything missed.
 
 ---

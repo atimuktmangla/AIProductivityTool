@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
-import { getCachedMetrics, setCachedMetrics } from '../../DB/cache/metricsCache.js';
+import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { getCachedMetrics, setCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
 
 function makeMetric(developerId: string): AggregatedDeveloperMetric {

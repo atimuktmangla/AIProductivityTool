@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
+import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
 
 // Seed module state via the exported getSyncStatus — we manipulate the internal
 // arrays by triggering getSyncStatus after manually populating them through a

@@ -60,7 +60,7 @@ export interface CacheCoverage {
 }
 ```
 
-**TypeScript interface** (frontend — add to `UI/src/types/index.ts`):
+**TypeScript interface** (frontend — add to `frontend/src/types/index.ts`):
 ```ts
 export interface CacheCoverage {
   configuredUsers: number;

@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
+import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     syncDeveloperIds:    ['alice'],
     syncIntervalMinutes: 1440,
   }),
 }));
 
-vi.mock('../../DB/cache/jsonFileCache.js', () => ({
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
   readJsonCache:  vi.fn().mockResolvedValue(null),
   writeJsonCache: vi.fn().mockResolvedValue(undefined),
   removeCacheDir: vi.fn().mockResolvedValue(undefined),

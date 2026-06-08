@@ -1,12 +1,12 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { getAllUsers, getAllProjectKeys, getReposInProjectPublic } from '../../DB/services/bitbucketService.js';
-import { aggregateMetrics } from '../../BL/metrics/aggregator.js';
-import { validateMetrics } from '../../BL/evals/metricsValidator.js';
+import { getAllUsers, getAllProjectKeys, getReposInProjectPublic } from '../../databaselayer/services/bitbucketService.js';
+import { aggregateMetrics } from '../../backend/metrics/aggregator.js';
+import { validateMetrics } from '../../backend/evals/metricsValidator.js';
 import { generateInsightsSummary } from '../../AI/skills/insightsSummary.js';
 import { metricsRateLimiter } from '../guardrails/rateLimiter.js';
 import { sanitiseMetricsPayload } from '../guardrails/sanitiser.js';
-import { getConfig } from '../../BL/config/env.js';
-import { getCachedMetrics, setCachedMetrics } from '../../DB/cache/metricsCache.js';
+import { getConfig } from '../../backend/config/env.js';
+import { getCachedMetrics, setCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
 import type { DashboardQueryPayload, MetricsResult } from '../../types/index.js';
 
 const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // serve pre-computed results for up to 1 hour

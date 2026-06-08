@@ -1,5 +1,5 @@
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
-import { getConfig } from '../../BL/config/env.js';
+import { getConfig } from '../../backend/config/env.js';
 import { callLlm } from '../providers/llmProvider.js';
 
 export interface TeamInsights {

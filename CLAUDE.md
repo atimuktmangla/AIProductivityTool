@@ -94,6 +94,14 @@ Not covered: generic tech tutorials, third-party docs, external APIs with no DSO
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
 at specs/002-sync-cache-improvements/plan.md
+
+## Project specs
+
+- Full project baseline spec: specs/000-project-baseline/spec.md
+- Data model (all types and SQLite schema): specs/000-project-baseline/data-model.md
+- API contract (all endpoints): specs/000-project-baseline/api-contract.md
+- SQLite cache migration: specs/001-sqlite-cache-migration/
+- Sync cache improvements: specs/002-sync-cache-improvements/
 <!-- SPECKIT END -->
 
 <!-- code-review-graph MCP tools -->

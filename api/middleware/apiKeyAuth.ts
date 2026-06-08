@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getConfig } from '../../BL/config/env.js';
+import { getConfig } from '../../backend/config/env.js';
 
 export function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const key = req.headers['x-api-key'];

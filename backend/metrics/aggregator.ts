@@ -1,17 +1,17 @@
 import { getConfig } from '../config/env.js';
-import { searchIssuesByAssignees, getIssuesByKeys } from '../../DB/services/jiraService.js';
+import { searchIssuesByAssignees, getIssuesByKeys } from '../../databaselayer/services/jiraService.js';
 import {
   getOpenPullRequestsByAuthor,
   getMergedPRsParticipatedByUser,
   getReposInProjectPublic,
   getUserDisplayName,
-} from '../../DB/services/bitbucketService.js';
+} from '../../databaselayer/services/bitbucketService.js';
 import {
   getCachedMergedPRsByAuthor,
   getCachedPRDetails,
   getCachedReposForUser,
   getCachedFilteredReposForUser,
-} from '../../DB/cache/bitbucketCache.js';
+} from '../../databaselayer/cache/bitbucketCache.js';
 import { concurrentMap } from '../util/concurrentMap.js';
 import {
   computeCycleTimeHrs,
@@ -22,7 +22,7 @@ import { computeReviewDepth } from './reviewDepth.js';
 import { classifyWorkType } from './workType.js';
 import { computeCodeQuality, type PRQualityInput } from './codeQuality.js';
 import { computeSpecMetrics, aggregateSpecMetrics } from './specMetrics.js';
-import { getIssueChangelog } from '../../DB/services/jiraService.js';
+import { getIssueChangelog } from '../../databaselayer/services/jiraService.js';
 import type {
   AggregatedDeveloperMetric,
   DashboardQueryPayload,

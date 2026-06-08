@@ -24,9 +24,9 @@ if (-not (Test-Path "$root\node_modules")) {
     npm install
     Pop-Location
 }
-if (-not (Test-Path "$root\UI\node_modules")) {
-    Write-Host "  [INFO] Running npm install (UI)..."
-    Push-Location "$root\UI"
+if (-not (Test-Path "$root\frontend\node_modules")) {
+    Write-Host "  [INFO] Running npm install (frontend)..."
+    Push-Location "$root\frontend"
     npm install
     Pop-Location
 }
@@ -36,7 +36,7 @@ if (-not (Test-Path "$root\UI\node_modules")) {
 if ($runTests) {
     $failed = $false
 
-    Write-Host "  [TEST] Backend (BL + integration)..."
+    Write-Host "  [TEST] Backend (backend + integration)..."
     Push-Location $root
     npx vitest run
     if ($LASTEXITCODE -ne 0) { $failed = $true }
@@ -44,7 +44,7 @@ if ($runTests) {
 
     Write-Host ""
     Write-Host "  [TEST] Frontend (UI components)..."
-    Push-Location "$root\UI"
+    Push-Location "$root\frontend"
     npx vitest run
     if ($LASTEXITCODE -ne 0) { $failed = $true }
     Pop-Location
@@ -79,8 +79,8 @@ if (-not (Test-Path "$root\.env")) {
     Read-Host "Press Enter to exit"
     exit 1
 }
-if (-not (Test-Path "$root\UI\.env")) {
-    Write-Host "  [ERROR] Missing $root\UI\.env  -  copy UI\.env.example and fill it in"
+if (-not (Test-Path "$root\frontend\.env")) {
+    Write-Host "  [ERROR] Missing $root\frontend\.env  -  copy frontend\.env.example and fill it in"
     Read-Host "Press Enter to exit"
     exit 1
 }
@@ -92,7 +92,7 @@ npm run build
 Pop-Location
 
 Write-Host "  [INFO] Building UI..."
-Push-Location "$root\UI"
+Push-Location "$root\frontend"
 npm run build
 Pop-Location
 
@@ -104,7 +104,7 @@ Start-Sleep -Seconds 3
 
 # 5. Start UI in a new window
 Write-Host "  [INFO] Starting UI on http://localhost:5173 ..."
-Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"cd '$root\UI'; npm run dev`"" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoProfile -NoExit -Command `"cd '$root\frontend'; npm run dev`"" -WindowStyle Normal
 
 Start-Sleep -Seconds 4
 

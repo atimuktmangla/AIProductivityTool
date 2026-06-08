@@ -1,8 +1,8 @@
-import { getConfig } from '../BL/config/env.js';
-import { aggregateMetrics } from '../BL/metrics/aggregator.js';
-import { getCachedMetrics, setCachedMetrics } from '../DB/cache/metricsCache.js';
-import { readJsonCache } from '../DB/cache/jsonFileCache.js';
-import { getDb } from '../DB/store/inMemoryDb.js';
+import { getConfig } from '../backend/config/env.js';
+import { aggregateMetrics } from '../backend/metrics/aggregator.js';
+import { getCachedMetrics, setCachedMetrics } from '../databaselayer/cache/metricsCache.js';
+import { readJsonCache } from '../databaselayer/cache/jsonFileCache.js';
+import { getDb } from '../databaselayer/store/inMemoryDb.js';
 
 export const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches dashboard TTL
 

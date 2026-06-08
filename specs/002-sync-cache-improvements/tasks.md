@@ -33,11 +33,11 @@ description: "Task list for Sync Cache Improvements"
 
 **⚠️ CRITICAL**: Steps here unlock US2 (cache-skip), US3 (warmup endpoint), and US5 (coverage endpoint).
 
-- [X] T002 Export `dateRange()` from `jobs/metricsSync.ts` so `WEB/routes/syncRouter.ts` can import it (needed by /cache-coverage and /warmup endpoints)
+- [X] T002 Export `dateRange()` from `jobs/metricsSync.ts` so `api/routes/syncRouter.ts` can import it (needed by /cache-coverage and /warmup endpoints)
 - [X] T003 [P] Add `METRICS_CACHE_TTL_MS = 60 * 60 * 1000` as a module-level constant at the top of `jobs/metricsSync.ts`
-- [X] T004 [P] Add `import { getCachedMetrics } from '../DB/cache/metricsCache.js'` to `jobs/metricsSync.ts`
+- [X] T004 [P] Add `import { getCachedMetrics } from '../databaselayer/cache/metricsCache.js'` to `jobs/metricsSync.ts`
 - [X] T005 [P] Add `CacheCoverage` and `WarmupResult` interfaces to `jobs/metricsSync.ts` (exported, used by syncRouter and frontend types)
-- [X] T006 [P] Add `CacheCoverage` and `WarmupResult` interfaces to `UI/src/types/index.ts` (frontend counterparts matching contracts/sync-api.md shapes)
+- [X] T006 [P] Add `CacheCoverage` and `WarmupResult` interfaces to `frontend/src/types/index.ts` (frontend counterparts matching contracts/sync-api.md shapes)
 
 **Checkpoint**: Build must still pass (`npm run build`) before proceeding.
 
@@ -56,7 +56,7 @@ description: "Task list for Sync Cache Improvements"
 ### Implementation for User Story 1
 
 - [X] T008 [US1] In `jobs/metricsSync.ts` `getSyncStatus()`: change `completedUsers: [...completedUsers]` to `completedUsers: completedUsers.slice(-50)` — leave `failedUsers` and `totalSyncUsers` unchanged
-- [X] T009 [US1] In `UI/src/components/SyncPage.tsx`: remove `.slice(-50)` on `status.completedUsers` (currently ~line 325) and remove the `sync-progress-chip--overflow` block (~lines 329–332) — server now guarantees ≤ 50
+- [X] T009 [US1] In `frontend/src/components/SyncPage.tsx`: remove `.slice(-50)` on `status.completedUsers` (currently ~line 325) and remove the `sync-progress-chip--overflow` block (~lines 329–332) — server now guarantees ≤ 50
 
 **Checkpoint**: `npm test` — T007 tests pass. `npm run build` passes. Manually verify progress panel in UI.
 
@@ -96,9 +96,9 @@ description: "Task list for Sync Cache Improvements"
 
 ### Implementation for User Story 3 (Endpoints)
 
-- [X] T017 [US3] In `WEB/routes/syncRouter.ts`: add `import { getCachedMetrics } from '../../DB/cache/metricsCache.js'` and `import { dateRange, getSyncStatus, triggerSyncForUsers } from '../../jobs/metricsSync.js'` (extend existing import)
-- [X] T018 [US3] In `WEB/routes/syncRouter.ts`: implement `syncRouter.get('/cache-coverage', …)` — read `sync-config.json`, call `getCachedMetrics` for all configured users using `dateRange()` and `METRICS_CACHE_TTL_MS`, return `CacheCoverage` shape (see contracts/sync-api.md)
-- [X] T019 [US3] In `WEB/routes/syncRouter.ts`: implement `syncRouter.post('/warmup', …)` — check `getSyncStatus().running` (→ 409), read config (→ 400 if absent/empty), call `getCachedMetrics` to split hits vs. misses, call `triggerSyncForUsers(misses)` if any, return `WarmupResult` shape (202 with users queued, 200 if none queued)
+- [X] T017 [US3] In `api/routes/syncRouter.ts`: add `import { getCachedMetrics } from '../../databaselayer/cache/metricsCache.js'` and `import { dateRange, getSyncStatus, triggerSyncForUsers } from '../../jobs/metricsSync.js'` (extend existing import)
+- [X] T018 [US3] In `api/routes/syncRouter.ts`: implement `syncRouter.get('/cache-coverage', …)` — read `sync-config.json`, call `getCachedMetrics` for all configured users using `dateRange()` and `METRICS_CACHE_TTL_MS`, return `CacheCoverage` shape (see contracts/sync-api.md)
+- [X] T019 [US3] In `api/routes/syncRouter.ts`: implement `syncRouter.post('/warmup', …)` — check `getSyncStatus().running` (→ 409), read config (→ 400 if absent/empty), call `getCachedMetrics` to split hits vs. misses, call `triggerSyncForUsers(misses)` if any, return `WarmupResult` shape (202 with users queued, 200 if none queued)
 
 **Checkpoint**: `npm test` — T015 and T016 tests pass. Manually verify endpoint responses via curl or the quickstart.md Scenarios 3 and 4.
 
@@ -127,15 +127,15 @@ description: "Task list for Sync Cache Improvements"
 
 ### Implementation for User Story 5
 
-- [X] T022 [US5] In `UI/src/hooks/useSync.ts`: add `coverage: CacheCoverage | null` and `isWarmingUp: boolean` to `SyncPageState` and `initialState`
-- [X] T023 [US5] In `UI/src/hooks/useSync.ts`: add `SET_COVERAGE` and `WARMUP_START` / `WARMUP_DONE` action types to the `Action` union and handle them in the reducer
-- [X] T024 [US5] In `UI/src/hooks/useSync.ts`: implement `fetchCoverage()` — `apiFetch<CacheCoverage>('/api/dashboard/sync/cache-coverage')` → dispatch `SET_COVERAGE`
-- [X] T025 [US5] In `UI/src/hooks/useSync.ts`: implement `warmupMissing()` — dispatch `WARMUP_START`, `apiFetch<WarmupResult>('/api/dashboard/sync/warmup', { method: 'POST' })`, then `fetchStatus()` + `fetchCoverage()`, dispatch `WARMUP_DONE`
-- [X] T026 [US5] In `UI/src/hooks/useSync.ts`: include `fetchCoverage()` in the initial load `useEffect` and in the polling `useEffect` (30 s idle interval alongside `fetchStatus` and `fetchLogs`)
-- [X] T027 [US5] In `UI/src/hooks/useSync.ts`: expose `warmupMissing` and `coverage` / `isWarmingUp` in the hook return value
-- [X] T028 [US5] In `UI/src/components/SyncPage.tsx`: add inline `CacheCoverageCard` component — displays `{cachedUsers} / {configuredUsers} users cached`, lists `uncachedUsers` (≤ 5 names, then `+N more` overflow), renders `<Skeleton>` while `coverage === null`, shows "No users configured" when `configuredUsers === 0`
-- [X] T029 [US5] In `UI/src/components/SyncPage.tsx`: place `<CacheCoverageCard>` in a new `<section className="sync-page__section">` between the Status card and the Progress panel (or below the Status card when no run is active)
-- [X] T030 [US5] In `UI/src/components/SyncPage.tsx`: add "Warm Missing Cache" `<button>` below the coverage card — disabled when `isRunning || (coverage?.uncachedUsers.length ?? 0) === 0 || isWarmingUp`; `title` prop shows `"All users are cached"` or `"A sync is already running"` as appropriate; `onClick` → `warmupMissing()`
+- [X] T022 [US5] In `frontend/src/hooks/useSync.ts`: add `coverage: CacheCoverage | null` and `isWarmingUp: boolean` to `SyncPageState` and `initialState`
+- [X] T023 [US5] In `frontend/src/hooks/useSync.ts`: add `SET_COVERAGE` and `WARMUP_START` / `WARMUP_DONE` action types to the `Action` union and handle them in the reducer
+- [X] T024 [US5] In `frontend/src/hooks/useSync.ts`: implement `fetchCoverage()` — `apiFetch<CacheCoverage>('/api/dashboard/sync/cache-coverage')` → dispatch `SET_COVERAGE`
+- [X] T025 [US5] In `frontend/src/hooks/useSync.ts`: implement `warmupMissing()` — dispatch `WARMUP_START`, `apiFetch<WarmupResult>('/api/dashboard/sync/warmup', { method: 'POST' })`, then `fetchStatus()` + `fetchCoverage()`, dispatch `WARMUP_DONE`
+- [X] T026 [US5] In `frontend/src/hooks/useSync.ts`: include `fetchCoverage()` in the initial load `useEffect` and in the polling `useEffect` (30 s idle interval alongside `fetchStatus` and `fetchLogs`)
+- [X] T027 [US5] In `frontend/src/hooks/useSync.ts`: expose `warmupMissing` and `coverage` / `isWarmingUp` in the hook return value
+- [X] T028 [US5] In `frontend/src/components/SyncPage.tsx`: add inline `CacheCoverageCard` component — displays `{cachedUsers} / {configuredUsers} users cached`, lists `uncachedUsers` (≤ 5 names, then `+N more` overflow), renders `<Skeleton>` while `coverage === null`, shows "No users configured" when `configuredUsers === 0`
+- [X] T029 [US5] In `frontend/src/components/SyncPage.tsx`: place `<CacheCoverageCard>` in a new `<section className="sync-page__section">` between the Status card and the Progress panel (or below the Status card when no run is active)
+- [X] T030 [US5] In `frontend/src/components/SyncPage.tsx`: add "Warm Missing Cache" `<button>` below the coverage card — disabled when `isRunning || (coverage?.uncachedUsers.length ?? 0) === 0 || isWarmingUp`; `title` prop shows `"All users are cached"` or `"A sync is already running"` as appropriate; `onClick` → `warmupMissing()`
 
 **Checkpoint**: Manual validation per quickstart.md Scenario 5 — coverage card, warmup button states, and auto-refresh.
 
@@ -145,7 +145,7 @@ description: "Task list for Sync Cache Improvements"
 
 **Purpose**: Traceability gate, final integration check, and type exports.
 
-- [X] T031 Verify `UI/src/types/index.ts` exports `CacheCoverage` and `WarmupResult` (created in T006) are used consistently by `SyncPage.tsx` and `useSync.ts` — no `any` or inline type literals
+- [X] T031 Verify `frontend/src/types/index.ts` exports `CacheCoverage` and `WarmupResult` (created in T006) are used consistently by `SyncPage.tsx` and `useSync.ts` — no `any` or inline type literals
 - [X] T032 Run `npm test` (vitest run + traceability checker) — all existing tests pass, all new `// @req REQ-002-*` tags present, zero untested/orphaned items reported
 - [X] T033 Run `npm run build` — zero TypeScript errors
 - [X] T034 [P] Run quickstart.md Scenario 1 manually (progress cap with 80+ users)
@@ -195,7 +195,7 @@ T002  Export dateRange() from jobs/metricsSync.ts
 T003  Add METRICS_CACHE_TTL_MS constant to jobs/metricsSync.ts
 T004  Add getCachedMetrics import to jobs/metricsSync.ts
 T005  Add CacheCoverage/WarmupResult to jobs/metricsSync.ts
-T006  Add CacheCoverage/WarmupResult to UI/src/types/index.ts
+T006  Add CacheCoverage/WarmupResult to frontend/src/types/index.ts
 
 # Phase 5 — tests can run in parallel:
 T015  cacheCoverageEndpoint.test.ts

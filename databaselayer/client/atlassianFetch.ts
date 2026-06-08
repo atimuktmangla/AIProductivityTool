@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError } from 'axios';
 import https from 'node:https';
-import { getConfig } from '../../BL/config/env.js';
+import { getConfig } from '../../backend/config/env.js';
 import { AtlassianHttpError } from '../errors/AtlassianHttpError.js';
 import { withRetry } from '../../AI/subagents/retryAgent.js';
 

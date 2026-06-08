@@ -165,7 +165,7 @@ The Vite dev server proxies `/api/*` to `:3000` automatically.
 npm run build        # outputs to dist/
 
 # Frontend
-cd UI && npm run build   # outputs to UI/dist/
+cd UI && npm run build   # outputs to frontend/dist/
 ```
 
 ---

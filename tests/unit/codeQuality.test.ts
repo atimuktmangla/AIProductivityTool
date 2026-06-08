@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeCodeQuality, type PRQualityInput } from '../../BL/metrics/codeQuality.js';
+import { computeCodeQuality, type PRQualityInput } from '../../backend/metrics/codeQuality.js';
 import type { RawActivity, RawJiraIssue } from '../../types/index.js';
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     botUserPattern: 'sonarqube|jenkins|deploymentbot|renovate|dependabot|buildbot|ci-bot',
   }),

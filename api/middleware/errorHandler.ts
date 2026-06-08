@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { AtlassianHttpError } from '../../DB/errors/AtlassianHttpError.js';
+import { AtlassianHttpError } from '../../databaselayer/errors/AtlassianHttpError.js';
 
 export function errorHandler(
   err: unknown,

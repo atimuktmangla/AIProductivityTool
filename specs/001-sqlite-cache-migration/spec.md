@@ -273,9 +273,9 @@ banner shows the correct `synced` timestamp matching the sync completion time.
   exists in the current codebase. The actual files being replaced are
   `data/cache/metrics-result/*.json` (per-developer metric envelopes) and
   `data/sync-logs/*.json` (sync run logs). This spec targets those actual files.
-- The `DB/cache/bitbucketCache.ts` and `DB/cache/ttlCache.ts` modules use an
+- The `databaselayer/cache/bitbucketCache.ts` and `databaselayer/cache/ttlCache.ts` modules use an
   in-process TTL map (not file I/O) and are out of scope for this migration.
-- The `DB/cache/jsonFileCache.ts` module must be retained for `data/sync-config.json`
+- The `databaselayer/cache/jsonFileCache.ts` module must be retained for `data/sync-config.json`
   reads/writes and the `data/.migrated-to-sqlite` sentinel file write. Callers that
   previously used it for metrics cache or run log I/O will be migrated to the
   in-memory store; the module itself is not deleted.

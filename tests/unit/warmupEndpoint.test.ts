@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { _resetForTesting } from '../../DB/store/inMemoryDb.js';
+import { _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
 
 const readJsonCacheMock = vi.fn();
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     apiKey: 'test-key',
     allowedOrigin: 'http://localhost:5173',
@@ -14,13 +14,13 @@ vi.mock('../../BL/config/env.js', () => ({
   }),
 }));
 
-vi.mock('../../DB/cache/jsonFileCache.js', () => ({
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
   readJsonCache:  readJsonCacheMock,
   writeJsonCache: vi.fn().mockResolvedValue(undefined),
   removeCacheDir: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../BL/metrics/aggregator.js', () => ({
+vi.mock('../../backend/metrics/aggregator.js', () => ({
   aggregateMetrics: vi.fn(),
 }));
 
@@ -32,10 +32,10 @@ describe('POST /sync/warmup (REQ-002-FR-006)', () => {
     readJsonCacheMock.mockReset();
     vi.resetModules();
 
-    const { initInMemoryDb: reinit } = await import('../../DB/store/inMemoryDb.js');
+    const { initInMemoryDb: reinit } = await import('../../databaselayer/store/inMemoryDb.js');
     reinit();
 
-    const { syncRouter } = await import('../../WEB/routes/syncRouter.js');
+    const { syncRouter } = await import('../../api/routes/syncRouter.js');
     app = express();
     app.use(express.json());
     app.use('/sync', syncRouter);
@@ -60,7 +60,7 @@ describe('POST /sync/warmup (REQ-002-FR-006)', () => {
       intervalMinutes: 1440,
     });
 
-    const { setCachedMetrics } = await import('../../DB/cache/metricsCache.js');
+    const { setCachedMetrics } = await import('../../databaselayer/cache/metricsCache.js');
     const end   = new Date();
     const start = new Date(end);
     start.setDate(start.getDate() - 90);
@@ -97,7 +97,7 @@ describe('POST /sync/warmup (REQ-002-FR-006)', () => {
     });
 
     // Cache only alice
-    const { setCachedMetrics } = await import('../../DB/cache/metricsCache.js');
+    const { setCachedMetrics } = await import('../../databaselayer/cache/metricsCache.js');
     const end   = new Date();
     const start = new Date(end);
     start.setDate(start.getDate() - 90);

@@ -18,7 +18,7 @@ const SPEC_FILE  = join(ROOT, 'docs', 'FUNCTIONAL_SPEC.md');
 // Both backend and UI test directories
 const TEST_DIRS = [
   join(ROOT, 'tests'),
-  join(ROOT, 'UI', 'src', 'test'),
+  join(ROOT, 'frontend', 'src', 'test'),
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

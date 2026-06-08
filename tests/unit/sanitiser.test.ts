@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import express, { type Request, type Response, type NextFunction } from 'express';
-import { sanitiseMetricsPayload } from '../../WEB/guardrails/sanitiser.js';
+import { sanitiseMetricsPayload } from '../../api/guardrails/sanitiser.js';
 
 // Minimal harness: runs the middleware and resolves with { status, body }
 function run(body: unknown): Promise<{ status: number; body: unknown }> {

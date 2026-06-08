@@ -142,7 +142,7 @@ DB/                             ← Data access layer
     ├── jiraService.ts          ← JQL search with pagination
     └── bitbucketService.ts     ← commits, PRs, activities, diffs, projects, repos
 
-UI/src/                         ← React frontend
+frontend/src/                         ← React frontend
 ├── hooks/useDashboard.ts       ← typed useReducer state machine
 └── components/
     ├── Dashboard.tsx

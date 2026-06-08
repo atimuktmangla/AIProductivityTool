@@ -1,21 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
+import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
 import express from 'express';
-import { metricsRouter } from '../../WEB/routes/metricsRouter.js';
-import { errorHandler } from '../../WEB/middleware/errorHandler.js';
-import { AtlassianHttpError } from '../../DB/errors/AtlassianHttpError.js';
+import { metricsRouter } from '../../api/routes/metricsRouter.js';
+import { errorHandler } from '../../api/middleware/errorHandler.js';
+import { AtlassianHttpError } from '../../databaselayer/errors/AtlassianHttpError.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
 
 // ── Mock the HTTP client layer ────────────────────────────────────────────────
-vi.mock('../../DB/client/atlassianFetch.js', () => ({
+vi.mock('../../databaselayer/client/atlassianFetch.js', () => ({
   atlassianGet:  vi.fn(),
   atlassianPost: vi.fn(),
 }));
 
 // ── Mock the cache layer — delegate straight to the live service fns so the
 //    existing atlassianGet mock handles everything without touching the filesystem.
-vi.mock('../../DB/cache/bitbucketCache.js', async () => {
-  const svc = await import('../../DB/services/bitbucketService.js');
+vi.mock('../../databaselayer/cache/bitbucketCache.js', async () => {
+  const svc = await import('../../databaselayer/services/bitbucketService.js');
   return {
     getCachedCommitsByAuthor:  svc.getCommitsByAuthor,
     getCachedMergedPRsByAuthor: (projectKey: string, repoSlug: string, authorSlug: string, startDate: string) =>
@@ -29,7 +29,7 @@ vi.mock('../../DB/cache/bitbucketCache.js', async () => {
 });
 
 // ── Mock env so getConfig() doesn't throw ────────────────────────────────────
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     jiraBaseUrl:             'http://jira.local',
     jiraToken:               'jira-token',
@@ -55,7 +55,7 @@ vi.mock('../../BL/config/env.js', () => ({
   }),
 }));
 
-import { atlassianGet, atlassianPost } from '../../DB/client/atlassianFetch.js';
+import { atlassianGet, atlassianPost } from '../../databaselayer/client/atlassianFetch.js';
 
 const mockedGet  = vi.mocked(atlassianGet);
 const mockedPost = vi.mocked(atlassianPost);

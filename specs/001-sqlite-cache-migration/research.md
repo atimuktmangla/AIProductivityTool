@@ -22,9 +22,9 @@
 
 ## Decision 2: Singleton Pattern
 
-**Decision**: Single module `DB/store/inMemoryDb.ts` exports a lazily-initialised singleton `Database` instance.
+**Decision**: Single module `databaselayer/store/inMemoryDb.ts` exports a lazily-initialised singleton `Database` instance.
 
-**Rationale**: Constitution Principle VI explicitly mandates a single connection at `DB/store/inMemoryDb.ts`. All read/write modules import from there. The module calls `new Database(':memory:')` once, runs `CREATE TABLE IF NOT EXISTS` for both tables, and exports the instance. Startup failure throws immediately — server.ts wraps `initInMemoryDb()` call with a top-level catch that calls `process.exit(1)` (satisfying FR-001 / SC-007).
+**Rationale**: Constitution Principle VI explicitly mandates a single connection at `databaselayer/store/inMemoryDb.ts`. All read/write modules import from there. The module calls `new Database(':memory:')` once, runs `CREATE TABLE IF NOT EXISTS` for both tables, and exports the instance. Startup failure throws immediately — server.ts wraps `initInMemoryDb()` call with a top-level catch that calls `process.exit(1)` (satisfying FR-001 / SC-007).
 
 **Alternatives considered**:
 - Per-module `new Database(':memory:')` — violates Principle VI, creates independent isolated stores.
@@ -109,7 +109,7 @@ The correct migration behaviour is:
 
 ## Decision 8: `cacheEviction.ts` Scope
 
-**Decision**: `evictOldCacheMonths` in `DB/cache/cacheEviction.ts` is out of scope. It evicts old month-subdirectory caches from `data/cache/` — a different path from `data/cache/metrics-result/`. After migration, `data/cache/metrics-result/` will no longer exist. The eviction call in `server.ts` may become a no-op (directory absent) or can be removed in a follow-up task.
+**Decision**: `evictOldCacheMonths` in `databaselayer/cache/cacheEviction.ts` is out of scope. It evicts old month-subdirectory caches from `data/cache/` — a different path from `data/cache/metrics-result/`. After migration, `data/cache/metrics-result/` will no longer exist. The eviction call in `server.ts` may become a no-op (directory absent) or can be removed in a follow-up task.
 
 ---
 

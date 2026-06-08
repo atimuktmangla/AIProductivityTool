@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeReviewDepth } from '../../BL/metrics/reviewDepth.js';
+import { computeReviewDepth } from '../../backend/metrics/reviewDepth.js';
 import {
   computePickupDelayHrs,
   computeReviewLifecycleHrs,
-} from '../../BL/metrics/cycleTime.js';
+} from '../../backend/metrics/cycleTime.js';
 import type { RawActivity } from '../../types/index.js';
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     botUserPattern: 'sonarqube|jenkins|deploymentbot|renovate|dependabot|buildbot|ci-bot',
   }),

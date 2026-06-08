@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyWorkType } from '../../BL/metrics/workType.js';
+import { classifyWorkType } from '../../backend/metrics/workType.js';
 
 describe('classifyWorkType', () => {
   // ── Known type-map entries ────────────────────────────────────────────────

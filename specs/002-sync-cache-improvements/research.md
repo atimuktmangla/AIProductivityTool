@@ -19,12 +19,12 @@
 
 ## Decision 2 — Where to define `METRICS_CACHE_TTL_MS`
 
-**Decision**: Define `METRICS_CACHE_TTL_MS = 60 * 60 * 1000` as a module-level constant in `jobs/metricsSync.ts`. The router (`WEB/routes/metricsRouter.ts`) keeps its own local constant with the same value.
+**Decision**: Define `METRICS_CACHE_TTL_MS = 60 * 60 * 1000` as a module-level constant in `jobs/metricsSync.ts`. The router (`api/routes/metricsRouter.ts`) keeps its own local constant with the same value.
 
-**Rationale**: Importing the constant from the router into `metricsSync.ts` would introduce a circular dependency chain (`metricsSync` → `metricsRouter` → `metricsSync`). Extracting it to `BL/config/env.ts` is the cleanest long-term solution but touches a shared module unnecessarily for a single numeric constant. Duplicating a well-named constant in two files is the simplest approach that avoids the cycle (Principle V).
+**Rationale**: Importing the constant from the router into `metricsSync.ts` would introduce a circular dependency chain (`metricsSync` → `metricsRouter` → `metricsSync`). Extracting it to `backend/config/env.ts` is the cleanest long-term solution but touches a shared module unnecessarily for a single numeric constant. Duplicating a well-named constant in two files is the simplest approach that avoids the cycle (Principle V).
 
 **Alternatives considered**:
-- Extract to `BL/config/env.ts` as a named export — technically correct but increases blast radius of this PR; deferred to a future cleanup.
+- Extract to `backend/config/env.ts` as a named export — technically correct but increases blast radius of this PR; deferred to a future cleanup.
 - Import from router — rejected (circular import).
 
 ---
@@ -43,13 +43,13 @@
 
 ## Decision 4 — `dateRange()` reuse in syncRouter
 
-**Decision**: Export `dateRange()` from `jobs/metricsSync.ts` and import it in `WEB/routes/syncRouter.ts` for use in `/cache-coverage` and `/warmup`.
+**Decision**: Export `dateRange()` from `jobs/metricsSync.ts` and import it in `api/routes/syncRouter.ts` for use in `/cache-coverage` and `/warmup`.
 
 **Rationale**: Both the coverage endpoint and the warm-up endpoint must compute the same 90-day window used by the sync job. Duplicating the 3-line helper would risk drift. Exporting it is the minimal change.
 
 **Alternatives considered**:
 - Duplicate the helper in `syncRouter.ts` — rejected (duplication risk; the date window is a business rule, not a utility).
-- Move it to a shared `BL/utils/dateRange.ts` — rejected (over-engineering a 3-line function for one new caller).
+- Move it to a shared `backend/utils/dateRange.ts` — rejected (over-engineering a 3-line function for one new caller).
 
 ---
 

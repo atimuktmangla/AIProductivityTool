@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
-import { syncRouter } from '../../WEB/routes/syncRouter.js';
-import { errorHandler } from '../../WEB/middleware/errorHandler.js';
+import { syncRouter } from '../../api/routes/syncRouter.js';
+import { errorHandler } from '../../api/middleware/errorHandler.js';
 
 // ── Mock metricsSync module ──────────────────────────────────────────────────
 
@@ -15,14 +15,14 @@ vi.mock('../../jobs/metricsSync.js', () => ({
 
 // ── Mock jsonFileCache so no disk I/O ────────────────────────────────────────
 
-vi.mock('../../DB/cache/jsonFileCache.js', () => ({
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
   readJsonCache:  vi.fn(async () => null),
   writeJsonCache: vi.fn(async () => undefined),
 }));
 
 // ── Mock env ─────────────────────────────────────────────────────────────────
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
     syncDeveloperIds:    [],
     syncIntervalMinutes: 0,
@@ -115,7 +115,7 @@ describe('syncRouter', () => {
 
   // @req REQ-4.8.3-1
   it('POST /config saves valid schedule config → 200 with saved body', async () => {
-    const { writeJsonCache } = await import('../../DB/cache/jsonFileCache.js');
+    const { writeJsonCache } = await import('../../databaselayer/cache/jsonFileCache.js');
     const body = { developerIds: ['alice'], intervalMinutes: 1440 };
     const res = await req('post', '/api/dashboard/sync/config', body);
     expect(res.status).toBe(200);

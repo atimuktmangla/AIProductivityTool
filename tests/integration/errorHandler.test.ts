@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import express, { type Request, type Response, type NextFunction } from 'express';
-import { errorHandler } from '../../WEB/middleware/errorHandler.js';
-import { AtlassianHttpError } from '../../DB/errors/AtlassianHttpError.js';
+import { errorHandler } from '../../api/middleware/errorHandler.js';
+import { AtlassianHttpError } from '../../databaselayer/errors/AtlassianHttpError.js';
 
 function buildApp(thrownError: unknown) {
   const app = express();

@@ -26,7 +26,7 @@ All changes are additive or narrowly scoped. No existing public function signatu
 - `express` — already installed (REST API host)
 - No new production dependencies
 
-**Storage**: In-memory SQLite via `DB/store/inMemoryDb.ts` (single connection, initialised at startup). `data/sync-config.json` remains file-based (exempt per Principle VI).
+**Storage**: In-memory SQLite via `databaselayer/store/inMemoryDb.ts` (single connection, initialised at startup). `data/sync-config.json` remains file-based (exempt per Principle VI).
 
 **Testing**: Vitest (`npm test`) + `scripts/check-traceability.ts`. New unit tests follow the pattern in `tests/unit/metricsSync.sqlite.test.ts`.
 
@@ -53,7 +53,7 @@ All changes are additive or narrowly scoped. No existing public function signatu
 | III — Working-Hours Accuracy | Not touched. | ✅ N/A |
 | IV — Opt-In Extensibility | Not touched. | ✅ N/A |
 | V — Simplicity Over Abstraction | Cache-skip is a pre-loop `getCachedMetrics` call, not a new class. New endpoints are two route handlers. Scripts are ~30 lines each. No new abstractions. | ✅ |
-| VI — In-Memory SQLite Storage Law | All cache reads/writes use `DB/store/inMemoryDb.ts`. Warmup reads `sync-config.json` via existing `readJsonCache` (config, exempt). No new JSON writes for metrics or logs. | ✅ |
+| VI — In-Memory SQLite Storage Law | All cache reads/writes use `databaselayer/store/inMemoryDb.ts`. Warmup reads `sync-config.json` via existing `readJsonCache` (config, exempt). No new JSON writes for metrics or logs. | ✅ |
 
 **Post-design re-check**: All six principles satisfied. Complexity Tracking table not needed.
 
@@ -81,11 +81,11 @@ specs/002-sync-cache-improvements/
 ```text
 # Modified files — backend
 jobs/metricsSync.ts             # getSyncStatus() cap; runSync() cache-skip; SyncBatchLog source field
-WEB/routes/syncRouter.ts        # GET /cache-coverage, POST /warmup
+api/routes/syncRouter.ts        # GET /cache-coverage, POST /warmup
 
 # Modified files — frontend
-UI/src/components/SyncPage.tsx  # Remove client-side .slice(-50); add CacheCoverageCard + warmup button
-UI/src/hooks/useSync.ts         # Add warmupMissing() + fetchCoverage(); coverage state
+frontend/src/components/SyncPage.tsx  # Remove client-side .slice(-50); add CacheCoverageCard + warmup button
+frontend/src/hooks/useSync.ts         # Add warmupMissing() + fetchCoverage(); coverage state
 
 # New files — scripts
 scripts/warm-cache.ps1          # PowerShell warm-up caller
@@ -98,12 +98,12 @@ tests/unit/cacheCoverageEndpoint.test.ts  # REQ-002-FR-005: /cache-coverage resp
 tests/unit/warmupEndpoint.test.ts         # REQ-002-FR-006: /warmup skip/queue logic
 
 # Unchanged files (confirmed)
-DB/cache/metricsCache.ts        # getCachedMetrics signature unchanged
-DB/store/inMemoryDb.ts          # No schema changes (source field is inside batches_json column)
+databaselayer/cache/metricsCache.ts        # getCachedMetrics signature unchanged
+databaselayer/store/inMemoryDb.ts          # No schema changes (source field is inside batches_json column)
 types/index.ts                  # SyncBatchLog extended with optional source field only
 ```
 
-**Structure Decision**: Web service with co-located React frontend. Backend changes in `jobs/` and `WEB/routes/`; frontend changes in `UI/src/`; scripts at repo root `scripts/`.
+**Structure Decision**: Web service with co-located React frontend. Backend changes in `jobs/` and `api/routes/`; frontend changes in `frontend/src/`; scripts at repo root `scripts/`.
 
 ---
 
@@ -124,7 +124,7 @@ Write `tests/unit/syncStatusCap.test.ts`:
 
 ### Step 2 — Remove client-side slice in `SyncPage.tsx`
 
-In `UI/src/components/SyncPage.tsx`:
+In `frontend/src/components/SyncPage.tsx`:
 - Remove `.slice(-50)` on `status.completedUsers` (currently line 325).
 - Remove the `sync-progress-chip--overflow` block (currently lines 329–332).
 
@@ -138,7 +138,7 @@ In `jobs/metricsSync.ts`:
 
 2. Add `METRICS_CACHE_TTL_MS = 60 * 60 * 1000` as a module-level constant (avoids circular import through the router; the router continues to use its own local constant with the same value).
 
-3. Import `getCachedMetrics` from `DB/cache/metricsCache.js`.
+3. Import `getCachedMetrics` from `databaselayer/cache/metricsCache.js`.
 
 4. Inside the `batch.map(async (userId) => …)` closure, before `aggregateMetrics`, add:
    ```
@@ -161,7 +161,7 @@ Write `tests/unit/syncCacheSkip.test.ts`:
 
 ### Step 4 — Add `GET /cache-coverage` endpoint
 
-In `WEB/routes/syncRouter.ts`:
+In `api/routes/syncRouter.ts`:
 
 1. Export `dateRange()` from `metricsSync.ts` (or duplicate the 3-line helper locally).
 2. Add `syncRouter.get('/cache-coverage', …)` handler:
@@ -175,7 +175,7 @@ Write `tests/unit/cacheCoverageEndpoint.test.ts`:
 
 ### Step 5 — Add `POST /warmup` endpoint
 
-In `WEB/routes/syncRouter.ts`, add `syncRouter.post('/warmup', …)` handler:
+In `api/routes/syncRouter.ts`, add `syncRouter.post('/warmup', …)` handler:
 
 1. Check `getSyncStatus().running` → HTTP 409 `{ error: 'A sync is already running' }`.
 2. Read `sync-config.json`. Empty/absent → HTTP 400 `{ error: 'No users configured' }`.
@@ -206,16 +206,16 @@ exit /b %ERRORLEVEL%
 
 ### Step 7 — Frontend: Cache Coverage card + warmup button
 
-`UI/src/hooks/useSync.ts`:
+`frontend/src/hooks/useSync.ts`:
 - Add `coverage: CacheCoverage | null` + `isWarmingUp: boolean` to `SyncPageState`.
 - Add `fetchCoverage()` — GET `/api/dashboard/sync/cache-coverage`.
 - Add `warmupMissing()` — POST `/api/dashboard/sync/warmup`; on response, refresh status + coverage.
 - Include `fetchCoverage` in the 30 s idle polling effect.
 
-`UI/src/components/SyncPage.tsx`:
+`frontend/src/components/SyncPage.tsx`:
 - Add `CacheCoverageCard` inline component: shows `{cachedUsers} / {configuredUsers} users cached`; lists uncached names ≤ 5 with `+N more` overflow; renders `Skeleton` while `coverage === null`.
 - Add "Warm Missing Cache" `<button>` below the card: disabled when `isRunning || (coverage?.uncachedUsers.length ?? 0) === 0 || isWarmingUp`; tooltip explains why disabled; `onClick` → `warmupMissing()`.
-- Add `CacheCoverage` and `WarmupResult` interfaces to `UI/src/types/index.ts` (or inline in `useSync.ts` if no separate frontend types file exists).
+- Add `CacheCoverage` and `WarmupResult` interfaces to `frontend/src/types/index.ts` (or inline in `useSync.ts` if no separate frontend types file exists).
 
 ### Step 8 — Run full test suite + traceability check
 

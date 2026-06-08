@@ -1,5 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { readJsonCache, writeJsonCache } from '../../DB/cache/jsonFileCache.js';
+import { readJsonCache, writeJsonCache } from '../../databaselayer/cache/jsonFileCache.js';
 import {
   getSyncStatus,
   triggerSyncForUsers,
@@ -9,8 +9,8 @@ import {
   dateRange,
   METRICS_CACHE_TTL_MS,
 } from '../../jobs/metricsSync.js';
-import { getCachedMetrics } from '../../DB/cache/metricsCache.js';
-import { getConfig } from '../../BL/config/env.js';
+import { getCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
+import { getConfig } from '../../backend/config/env.js';
 
 export const syncRouter = Router();
 

@@ -8,7 +8,7 @@
 
 ## Summary
 
-Replace the file-based JSON analytics cache (`data/cache/metrics-result/*.json` and `data/sync-logs/*.json`) with a single in-memory SQLite database (`:memory:`), eliminating file I/O race conditions during concurrent sync batches. The store is provisioned by a new singleton module `DB/store/inMemoryDb.ts` using `better-sqlite3` (Node 18 fallback per Principle VI). All existing public function signatures remain unchanged; callers and tests need zero modification. First startup performs a one-time sentinel-gated cleanup of legacy JSON files.
+Replace the file-based JSON analytics cache (`data/cache/metrics-result/*.json` and `data/sync-logs/*.json`) with a single in-memory SQLite database (`:memory:`), eliminating file I/O race conditions during concurrent sync batches. The store is provisioned by a new singleton module `databaselayer/store/inMemoryDb.ts` using `better-sqlite3` (Node 18 fallback per Principle VI). All existing public function signatures remain unchanged; callers and tests need zero modification. First startup performs a one-time sentinel-gated cleanup of legacy JSON files.
 
 ---
 
@@ -47,8 +47,8 @@ Replace the file-based JSON analytics cache (`data/cache/metrics-result/*.json` 
 | II — Boundary-First Security | No new trust boundaries introduced. SQLite is process-internal. | ✅ N/A |
 | III — Working-Hours Accuracy | Not touched by this change. | ✅ N/A |
 | IV — Opt-In Extensibility | Not touched by this change. | ✅ N/A |
-| V — Simplicity Over Abstraction | `DB/store/inMemoryDb.ts` is the minimal singleton; no ORM, no query builder, no abstraction layers. `getCachedMetrics` and `setCachedMetrics` stay in their existing module. | ✅ |
-| VI — In-Memory SQLite Storage Law | Exactly one `:memory:` connection at `DB/store/inMemoryDb.ts`. No second connection. No new JSON cache writes for metrics or run logs. | ✅ Core of this feature |
+| V — Simplicity Over Abstraction | `databaselayer/store/inMemoryDb.ts` is the minimal singleton; no ORM, no query builder, no abstraction layers. `getCachedMetrics` and `setCachedMetrics` stay in their existing module. | ✅ |
+| VI — In-Memory SQLite Storage Law | Exactly one `:memory:` connection at `databaselayer/store/inMemoryDb.ts`. No second connection. No new JSON cache writes for metrics or run logs. | ✅ Core of this feature |
 
 **Post-design re-check**: All six principles satisfied. No violations. Complexity Tracking table not needed.
 
@@ -75,21 +75,21 @@ specs/001-sqlite-cache-migration/
 
 ```text
 # New files
-DB/store/inMemoryDb.ts        # Singleton :memory: Database + schema init + _resetForTesting()
-DB/store/migrationCleanup.ts  # runMigrationCleanup() — standalone, testable, not embedded in server.ts
+databaselayer/store/inMemoryDb.ts        # Singleton :memory: Database + schema init + _resetForTesting()
+databaselayer/store/migrationCleanup.ts  # runMigrationCleanup() — standalone, testable, not embedded in server.ts
 
 # Modified files
-DB/cache/metricsCache.ts      # getCachedMetrics / setCachedMetrics → SQLite
+databaselayer/cache/metricsCache.ts      # getCachedMetrics / setCachedMetrics → SQLite
 jobs/metricsSync.ts           # writeRunLog / listRunLogs / purgeRunLogs → SQLite
 server.ts                     # initInMemoryDb() call + runMigrationCleanup() import + call
 
 # Unchanged files (confirmed)
-DB/cache/jsonFileCache.ts     # Retained for sync-config.json + sentinel file
-DB/cache/cacheEviction.ts     # Out of scope (month-subdirectory eviction)
-DB/cache/bitbucketCache.ts    # Out of scope (TTL map, not file I/O)
-DB/cache/ttlCache.ts          # Out of scope
-WEB/routes/metricsRouter.ts   # Zero changes (getCachedMetrics contract preserved)
-WEB/routes/syncRouter.ts      # Zero changes (listRunLogs / purgeRunLogs contract preserved)
+databaselayer/cache/jsonFileCache.ts     # Retained for sync-config.json + sentinel file
+databaselayer/cache/cacheEviction.ts     # Out of scope (month-subdirectory eviction)
+databaselayer/cache/bitbucketCache.ts    # Out of scope (TTL map, not file I/O)
+databaselayer/cache/ttlCache.ts          # Out of scope
+api/routes/metricsRouter.ts   # Zero changes (getCachedMetrics contract preserved)
+api/routes/syncRouter.ts      # Zero changes (listRunLogs / purgeRunLogs contract preserved)
 
 # New test files
 tests/unit/inMemoryDb.test.ts           # REQ-4.12-1, REQ-4.12-4: init, fail-fast, singleton
@@ -113,7 +113,7 @@ The tasks are sequenced to keep the build green at every step.
 
 Install `better-sqlite3` and its types. Verify `npm run build` passes. No logic changes.
 
-### Step 2 — Create `DB/store/inMemoryDb.ts`
+### Step 2 — Create `databaselayer/store/inMemoryDb.ts`
 
 Implement the singleton module:
 - `initInMemoryDb()` — opens `:memory:`, creates both tables, sets `initialised = true`.
@@ -140,7 +140,7 @@ Write `tests/unit/migrationCleanup.test.ts` covering:
 - `// @req REQ-FR-009` — cleanup skipped when sentinel present
 - `// @req REQ-FR-009` — cleanup continues when delete fails (non-blocking)
 
-### Step 4 — Migrate `DB/cache/metricsCache.ts`
+### Step 4 — Migrate `databaselayer/cache/metricsCache.ts`
 
 Replace `readJsonCache` / `writeJsonCache` calls with `getDb()` prepared statements:
 - `getCachedMetrics`: `SELECT metric_json, cached_at FROM metrics_cache WHERE developer_id=? AND start_date=? AND end_date=?` for each devId. Filter by `Date.now() - cached_at <= maxAgeMs`.

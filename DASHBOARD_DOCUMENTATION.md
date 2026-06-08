@@ -306,9 +306,9 @@ Browser (React + Recharts)
   └── Vite dev server :5173  (proxies /api/* → :3000)
 
 Express API :3000
-  ├── WEB layer  — routes, auth middleware, rate limiter, sanitiser
-  ├── BL layer   — metric aggregation, cycle time, code quality, work classification
-  └── DB layer   — Bitbucket + Jira REST clients, TTL cache, retry logic
+  ├── api layer            — routes, auth middleware, rate limiter, sanitiser
+  ├── backend layer        — metric aggregation, cycle time, code quality, work classification
+  └── databaselayer layer  — Bitbucket + Jira REST clients, TTL cache, retry logic
 
 On-premises Bitbucket Server  ←→  On-premises Jira Server
 ```

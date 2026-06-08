@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../DB/store/inMemoryDb.js';
+import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
 
 // ── Shared mocks ──────────────────────────────────────────────────────────────
 
-vi.mock('../../BL/config/env.js', () => ({
+vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({ syncDeveloperIds: [], syncIntervalMinutes: 0 }),
 }));
 
-vi.mock('../../DB/cache/jsonFileCache.js', () => ({
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
   readJsonCache:  vi.fn().mockResolvedValue(null),
   writeJsonCache: vi.fn().mockResolvedValue(undefined),
   removeCacheDir: vi.fn().mockResolvedValue(undefined),
 }));
 
 const aggregateMetricsMock = vi.fn();
-vi.mock('../../BL/metrics/aggregator.js', () => ({
+vi.mock('../../backend/metrics/aggregator.js', () => ({
   aggregateMetrics: (...args: unknown[]) => aggregateMetricsMock(...args),
 }));
 
@@ -50,7 +50,7 @@ describe('runSync cache-skip behaviour (REQ-002-FR-003, REQ-002-FR-004)', () => 
 
   // @req REQ-002-FR-003
   it('fresh cache hit skips aggregateMetrics call entirely', async () => {
-    const { setCachedMetrics } = await import('../../DB/cache/metricsCache.js');
+    const { setCachedMetrics } = await import('../../databaselayer/cache/metricsCache.js');
     const { triggerSyncForUsers, getSyncStatus } = await import('../../jobs/metricsSync.js');
 
     const end   = new Date();
@@ -90,7 +90,7 @@ describe('runSync cache-skip behaviour (REQ-002-FR-003, REQ-002-FR-004)', () => 
 
   // @req REQ-002-FR-004
   it('batch log records source: cache for a cache-hit user', async () => {
-    const { setCachedMetrics } = await import('../../DB/cache/metricsCache.js');
+    const { setCachedMetrics } = await import('../../databaselayer/cache/metricsCache.js');
     const { triggerSyncForUsers, listRunLogs } = await import('../../jobs/metricsSync.js');
 
     const end   = new Date();

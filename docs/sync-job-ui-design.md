@@ -64,7 +64,7 @@ export async function triggerSyncForUsers(developerIds: string[]): Promise<void>
 - On each interval tick, `runSync()` reads `data/sync-config.json` first; if present its `developerIds` and `intervalMinutes` override env values
 - `lastRunAt` and `nextRunAt` are tracked in module-level variables
 
-### `WEB/routes/syncRouter.ts` — new file
+### `api/routes/syncRouter.ts` — new file
 
 ```
 GET  /status   → getSyncStatus()
@@ -80,7 +80,7 @@ All endpoints under `/api/dashboard/sync`, protected by existing `apiKeyAuth` mi
 ### `server.ts`
 
 ```typescript
-import { syncRouter } from './WEB/routes/syncRouter.js';
+import { syncRouter } from './api/routes/syncRouter.js';
 app.use('/api/dashboard/sync', syncRouter);
 ```
 
@@ -90,7 +90,7 @@ app.use('/api/dashboard/sync', syncRouter);
 
 ### Navigation
 
-Add a two-tab nav bar above the existing Dashboard layout in `UI/src/main.tsx`:
+Add a two-tab nav bar above the existing Dashboard layout in `frontend/src/main.tsx`:
 
 ```
 [ Developer Metrics ]   [ Sync Jobs ]
@@ -98,7 +98,7 @@ Add a two-tab nav bar above the existing Dashboard layout in `UI/src/main.tsx`:
 
 No external router — a single `activePage` state variable in an `App` wrapper component switches between `<Dashboard />` and `<SyncPage />`.
 
-### `UI/src/components/SyncPage.tsx` — layout
+### `frontend/src/components/SyncPage.tsx` — layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -159,16 +159,16 @@ Fields displayed:
 | File | Change |
 |------|--------|
 | `jobs/metricsSync.ts` | Add `getSyncStatus()`, `triggerSyncForUsers()`, read `data/sync-config.json` |
-| `WEB/routes/syncRouter.ts` | New — 4 endpoints |
+| `api/routes/syncRouter.ts` | New — 4 endpoints |
 | `server.ts` | Mount `syncRouter` |
-| `UI/src/main.tsx` | Wrap in `App` with nav + `activePage` state |
-| `UI/src/hooks/useSync.ts` | New — fetch status (polling), trigger, load/save config |
-| `UI/src/components/SyncPage.tsx` | New — full admin page |
-| `UI/src/styles.css` | New classes: `.app-nav`, `.sync-page`, `.sync-status-card`, `.sync-badge--running`, `.sync-badge--idle`, `.sync-mode-tabs`, `.sync-schedule` |
+| `frontend/src/main.tsx` | Wrap in `App` with nav + `activePage` state |
+| `frontend/src/hooks/useSync.ts` | New — fetch status (polling), trigger, load/save config |
+| `frontend/src/components/SyncPage.tsx` | New — full admin page |
+| `frontend/src/styles.css` | New classes: `.app-nav`, `.sync-page`, `.sync-status-card`, `.sync-badge--running`, `.sync-badge--idle`, `.sync-mode-tabs`, `.sync-schedule` |
 
 Reused without changes:
-- `UI/src/components/UserPicker.tsx`
-- `UI/src/components/RepoPicker.tsx` (project dropdown part only)
+- `frontend/src/components/UserPicker.tsx`
+- `frontend/src/components/RepoPicker.tsx` (project dropdown part only)
 
 ---
 

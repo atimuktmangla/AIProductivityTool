@@ -19,7 +19,7 @@
   Follow-up TODOs:
     - SPEC: Revise REQ-4.8.1-1, REQ-4.8.4-1, and section 6 data-flow to replace
       JSON-file references with in-memory SQLite semantics.
-    - CODE: Migrate DB/cache/metricsCache.ts and jobs/metricsSync.ts from JSON files
+    - CODE: Migrate databaselayer/cache/metricsCache.ts and jobs/metricsSync.ts from JSON files
       to in-memory SQLite using node:sqlite (Node ≥ 22.5) or better-sqlite3 fallback.
 -->
 
@@ -44,7 +44,7 @@ All data crossing a trust boundary MUST be validated before it flows into busine
 Trust boundaries are: HTTP request bodies and query params, Jira API responses, Bitbucket
 API responses, file reads from `data/`, and environment variables at startup.
 
-- HTTP inputs: validated with typed schemas in `WEB/guardrails/`
+- HTTP inputs: validated with typed schemas in `api/guardrails/`
 - API responses: typed via `types/index.ts` interfaces; unknown shapes must be handled
 - No credentials or PII in logs — redact before logging
 - No string concatenation into SQL, shell commands, or external URLs
@@ -112,7 +112,7 @@ Implementation constraint — keep dependencies minimal:
 - Prefer `node:sqlite` (built-in, Node.js ≥ 22.5, no `package.json` entry needed).
 - If the runtime Node version is below 22.5, use `better-sqlite3` (one package,
   synchronous API, zero transitive deps). No ORM, no query builder.
-- A single `DB/store/inMemoryDb.ts` module MUST own the singleton connection and
+- A single `databaselayer/store/inMemoryDb.ts` module MUST own the singleton connection and
   schema initialisation. All other modules import from there — never open a second
   connection.
 
@@ -127,16 +127,16 @@ needed.
 ## Quality & Safety Standards
 
 - **TypeScript strict mode** is on. No `any` escapes without a justifying comment.
-- **Vitest** is the sole test runner for both backend (`tests/`) and frontend (`UI/src/test/`).
+- **Vitest** is the sole test runner for both backend (`tests/`) and frontend (`frontend/src/test/`).
   Tests run in CI on every push to master via `.github/workflows/ci.yml`.
 - **No secrets committed.** `data/`, `.env`, `*.key`, `*.pem`, and `coverage/` are
   git-ignored. The `.env.example` file MUST contain only safe placeholder values.
 - **Structured errors only.** `throw new AppError(...)` with a typed payload.
   Never `throw new Error('something broke')`.
 - **Leave-adjustment constant** (`33/261`) MUST NOT be duplicated. It lives in
-  `BL/metrics/cycleTime.ts` and is imported wherever needed.
+  `backend/metrics/cycleTime.ts` and is imported wherever needed.
 - **Single SQLite connection.** The in-memory database singleton MUST be initialised
-  once at server startup in `DB/store/inMemoryDb.ts`. PRs that open additional
+  once at server startup in `databaselayer/store/inMemoryDb.ts`. PRs that open additional
   connections or write JSON cache files MUST be rejected.
 
 ## Development Workflow

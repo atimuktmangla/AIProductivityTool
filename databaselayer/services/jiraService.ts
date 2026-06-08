@@ -1,4 +1,4 @@
-import { getConfig } from '../../BL/config/env.js';
+import { getConfig } from '../../backend/config/env.js';
 import { atlassianGet, atlassianPost } from '../client/atlassianFetch.js';
 import type { RawJiraIssue, JiraSearchResponse, JiraIssueWithChangelog } from '../../types/index.js';
 

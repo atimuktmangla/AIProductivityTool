@@ -26,7 +26,7 @@
 
 ## Phase 2: Foundational — Singleton Store
 
-**Purpose**: Create `DB/store/inMemoryDb.ts` (the prerequisite for all user story migrations). Must be complete before any story phase begins.
+**Purpose**: Create `databaselayer/store/inMemoryDb.ts` (the prerequisite for all user story migrations). Must be complete before any story phase begins.
 
 **⚠️ CRITICAL**: All user story phases depend on this module.
 
@@ -36,11 +36,11 @@
 
 ### Implementation
 
-- [X] T004 Create `DB/store/inMemoryDb.ts` with `initInMemoryDb()` and `getDb()` functions — `:memory:` database, `CREATE TABLE IF NOT EXISTS` for both `metrics_cache` and `sync_run_logs` per the schema in `data-model.md`
-- [X] T005 Add `AppStoreNotInitialisedError` (typed structured error) exported from `DB/store/inMemoryDb.ts` — thrown by `getDb()` when called before `initInMemoryDb()`
+- [X] T004 Create `databaselayer/store/inMemoryDb.ts` with `initInMemoryDb()` and `getDb()` functions — `:memory:` database, `CREATE TABLE IF NOT EXISTS` for both `metrics_cache` and `sync_run_logs` per the schema in `data-model.md`
+- [X] T005 Add `AppStoreNotInitialisedError` (typed structured error) exported from `databaselayer/store/inMemoryDb.ts` — thrown by `getDb()` when called before `initInMemoryDb()`
 - [X] T006 Run `tests/unit/inMemoryDb.test.ts` — confirm all three test cases pass
 
-**Checkpoint**: `DB/store/inMemoryDb.ts` compiles and all store unit tests pass. `npm run build` still green.
+**Checkpoint**: `databaselayer/store/inMemoryDb.ts` compiles and all store unit tests pass. `npm run build` still green.
 
 ---
 
@@ -52,13 +52,13 @@
 
 ### Tests for User Story 1
 
-- [X] T007 [P] Write `tests/unit/metricsCache.sqlite.test.ts` — `// @req` tags for REQ-4.12-2 (`setCachedMetrics` stores with `cachedAt`; `getCachedMetrics` returns hit within TTL, miss when stale, miss when absent, `oldestCachedAt` is min across hits). Call `_resetForTesting()` (exported from `DB/store/inMemoryDb.ts`, drops and recreates tables) in `beforeEach` to guarantee a clean state between tests.
+- [X] T007 [P] Write `tests/unit/metricsCache.sqlite.test.ts` — `// @req` tags for REQ-4.12-2 (`setCachedMetrics` stores with `cachedAt`; `getCachedMetrics` returns hit within TTL, miss when stale, miss when absent, `oldestCachedAt` is min across hits). Call `_resetForTesting()` (exported from `databaselayer/store/inMemoryDb.ts`, drops and recreates tables) in `beforeEach` to guarantee a clean state between tests.
 
 ### Implementation for User Story 1
 
-- [X] T008 [US1] Rewrite `getCachedMetrics` in `DB/cache/metricsCache.ts` — replace `readJsonCache` calls with `SELECT metric_json, cached_at FROM metrics_cache WHERE developer_id=? AND start_date=? AND end_date=?` prepared statement via `getDb()`. TTL comparison logic unchanged.
-- [X] T009 [US1] Rewrite `setCachedMetrics` in `DB/cache/metricsCache.ts` — replace `writeJsonCache` calls with `INSERT OR REPLACE INTO metrics_cache (developer_id, start_date, end_date, metric_json, cached_at) VALUES (?,?,?,?,?)` prepared statement via `getDb()`.
-- [X] T010 [US1] Remove `devCachePath`, `safeKey` helper functions and the `readJsonCache`/`writeJsonCache` imports from `DB/cache/metricsCache.ts` (now unused).
+- [X] T008 [US1] Rewrite `getCachedMetrics` in `databaselayer/cache/metricsCache.ts` — replace `readJsonCache` calls with `SELECT metric_json, cached_at FROM metrics_cache WHERE developer_id=? AND start_date=? AND end_date=?` prepared statement via `getDb()`. TTL comparison logic unchanged.
+- [X] T009 [US1] Rewrite `setCachedMetrics` in `databaselayer/cache/metricsCache.ts` — replace `writeJsonCache` calls with `INSERT OR REPLACE INTO metrics_cache (developer_id, start_date, end_date, metric_json, cached_at) VALUES (?,?,?,?,?)` prepared statement via `getDb()`.
+- [X] T010 [US1] Remove `devCachePath`, `safeKey` helper functions and the `readJsonCache`/`writeJsonCache` imports from `databaselayer/cache/metricsCache.ts` (now unused).
 - [X] T011 [US1] Run `tests/unit/metricsCache.sqlite.test.ts` — confirm all cases pass.
 - [X] T012 [US1] Run `npm test` — confirm all pre-existing tests (including `metricsRouter.test.ts`) still pass. The `getCachedMetrics`/`setCachedMetrics` public signatures are unchanged; callers need zero edits.
 
@@ -74,7 +74,7 @@
 
 ### Implementation for User Story 2
 
-- [X] T013 [US2] Confirm `metricsRouter.ts` requires zero changes — `getCachedMetrics` signature and return shape are identical. Trace the call in `WEB/routes/metricsRouter.ts:79-103` to verify `cacheStatus`, `cachedAt` (mapped from `oldestCachedAt`) are passed through unchanged.
+- [X] T013 [US2] Confirm `metricsRouter.ts` requires zero changes — `getCachedMetrics` signature and return shape are identical. Trace the call in `api/routes/metricsRouter.ts:79-103` to verify `cacheStatus`, `cachedAt` (mapped from `oldestCachedAt`) are passed through unchanged.
 - [X] T014 [US2] Run the quickstart Scenario 3 from `quickstart.md` — `POST /api/dashboard/metrics` with all synced developers, verify `cacheStatus: 'full'`, response within 500 ms.
 - [X] T015 [US2] Run `tests/integration/metricsRouter.test.ts` — confirm partial-hit and full-hit test cases still pass (these already mock `getCachedMetrics`; no changes needed).
 
@@ -126,13 +126,13 @@
 
 ### Tests for startup integration
 
-- [X] T025 [P] Write `tests/unit/migrationCleanup.test.ts` — `// @req` tags for REQ-4.12-5: (a) cleanup runs and sentinel is written when sentinel is absent, (b) cleanup is skipped when sentinel is present, (c) cleanup continues (non-blocking; only a warning logged) when `removeCacheDir` throws. Import from `DB/store/migrationCleanup.ts` (see T027).
+- [X] T025 [P] Write `tests/unit/migrationCleanup.test.ts` — `// @req` tags for REQ-4.12-5: (a) cleanup runs and sentinel is written when sentinel is absent, (b) cleanup is skipped when sentinel is present, (c) cleanup continues (non-blocking; only a warning logged) when `removeCacheDir` throws. Import from `databaselayer/store/migrationCleanup.ts` (see T027).
 
 ### Implementation
 
 - [X] T026 Update `server.ts` — call `initInMemoryDb()` in a try/catch before `app.listen()`. On catch: `console.error('[store] failed to initialise in-memory database:', err instanceof Error ? err.message : String(err))` followed by `process.exit(1)`. This satisfies REQ-4.12-1 / SC-007. (**Must complete before starting `npm run dev` after Phase 3 or Phase 5 edits** — once `getDb()` calls exist in `metricsCache.ts` / `metricsSync.ts`, an uninitialised store throws `AppStoreNotInitialisedError` on every request.)
-- [X] T027 Create `DB/store/migrationCleanup.ts` — export `async function runMigrationCleanup(): Promise<void>`. Logic: check existence of `data/.migrated-to-sqlite` via `readJsonCache`; if absent, call `removeCacheDir('data/cache/metrics-result')` and `removeCacheDir('data/sync-logs')` each in a separate try/catch (log `console.warn` on failure, never throw); write sentinel via `writeJsonCache('data/.migrated-to-sqlite', { migratedAt: new Date().toISOString() })`; log one-time migration notice. If sentinel present, return immediately. (Standalone module — not embedded in `server.ts` — so `tests/unit/migrationCleanup.test.ts` can import and test it without booting Express.)
-- [X] T028 Import `runMigrationCleanup` from `DB/store/migrationCleanup.ts` in `server.ts`. Call `await runMigrationCleanup()` after `initInMemoryDb()` and before `startMetricsSyncJob()`.
+- [X] T027 Create `databaselayer/store/migrationCleanup.ts` — export `async function runMigrationCleanup(): Promise<void>`. Logic: check existence of `data/.migrated-to-sqlite` via `readJsonCache`; if absent, call `removeCacheDir('data/cache/metrics-result')` and `removeCacheDir('data/sync-logs')` each in a separate try/catch (log `console.warn` on failure, never throw); write sentinel via `writeJsonCache('data/.migrated-to-sqlite', { migratedAt: new Date().toISOString() })`; log one-time migration notice. If sentinel present, return immediately. (Standalone module — not embedded in `server.ts` — so `tests/unit/migrationCleanup.test.ts` can import and test it without booting Express.)
+- [X] T028 Import `runMigrationCleanup` from `databaselayer/store/migrationCleanup.ts` in `server.ts`. Call `await runMigrationCleanup()` after `initInMemoryDb()` and before `startMetricsSyncJob()`.
 - [X] T029 Run `tests/unit/migrationCleanup.test.ts` — confirm all three cleanup cases pass.
 - [X] T030 Run quickstart Scenario 1 (fail-fast) and Scenario 2 (migration cleanup) from `quickstart.md` to validate end-to-end startup behaviour.
 - [X] T030a Run `npx tsx scripts/check-traceability.ts` after T029 — early traceability check on all new `@req` tags before the Phase 8 full sweep.
@@ -148,7 +148,7 @@
 - [X] T031 [P] Final merge-gate: run `npm test` (Vitest + traceability checker) — all tests green, zero untested/orphaned/untagged items. All new `@req REQ-4.12-x` tags must map to passing `it()` blocks.
 - [X] T032 [P] Confirm `package.json` production `dependencies` contains only pre-existing packages plus `better-sqlite3` — no extra packages crept in (SC-005 verification).
 - [X] T033 Verify no new JSON cache files are written after any sync run: `ls data/cache/metrics-result/ 2>/dev/null` and `ls data/sync-logs/*.json 2>/dev/null` must both produce no output (quickstart Scenario "No new JSON cache files").
-- [X] T034 [P] Confirm `DB/cache/cacheEviction.ts` call in `server.ts` is a no-op when `data/cache/` no longer contains `metrics-result/` — no code change needed; verify `evictOldCacheMonths` handles a missing directory gracefully (it already uses `listCacheMonths` which returns `[]` on ENOENT).
+- [X] T034 [P] Confirm `databaselayer/cache/cacheEviction.ts` call in `server.ts` is a no-op when `data/cache/` no longer contains `metrics-result/` — no code change needed; verify `evictOldCacheMonths` handles a missing directory gracefully (it already uses `listCacheMonths` which returns `[]` on ENOENT).
 - [X] T035 Run `npm run build` — confirm TypeScript compilation is clean with strict mode and no `any` escapes without justifying comments.
 
 **Checkpoint**: Full test suite green. Traceability checker passes. Build clean. No JSON cache files written by the new code.
@@ -161,7 +161,7 @@
 
 - **Phase 1 (Setup)**: No dependencies — start immediately
 - **Phase 2 (Foundational)**: Depends on Phase 1 (need `better-sqlite3` installed)
-- **Phases 3–6 (User Stories)**: All depend on Phase 2 (`DB/store/inMemoryDb.ts` must exist)
+- **Phases 3–6 (User Stories)**: All depend on Phase 2 (`databaselayer/store/inMemoryDb.ts` must exist)
   - Phase 3 and Phase 7 can be developed in parallel (different files)
   - Phase 4 depends on Phase 3 (validates SQLite cache hit path)
   - Phase 5 is independent of Phase 3/4 (different tables, different module)
@@ -190,7 +190,7 @@
 ```text
 Parallelizable:
   Task T003: Write tests/unit/inMemoryDb.test.ts
-  Task T004: Create DB/store/inMemoryDb.ts
+  Task T004: Create databaselayer/store/inMemoryDb.ts
 
 Sequential after T004:
   Task T005: Add AppStoreNotInitialisedError (same file as T004)
@@ -214,7 +214,7 @@ Parallel batch (no dependencies between them):
 ### MVP Scope (US1 + fail-fast startup — delivers the core P1 value)
 
 1. Phase 1: Install `better-sqlite3`
-2. Phase 2: Create `DB/store/inMemoryDb.ts` (T003–T006)
+2. Phase 2: Create `databaselayer/store/inMemoryDb.ts` (T003–T006)
 3. Phase 3: Migrate metrics cache (T007–T012)
 4. Phase 7: Wire `server.ts` startup (T025–T030)
 5. **STOP and VALIDATE**: Sync runs without file I/O errors; `GET /metrics` returns from SQLite cache. Quickstart Scenarios 1, 2, 3 pass.
@@ -238,6 +238,6 @@ Work sequentially: Phase 1 → 2 → 3 → 7 → 5 → 4 → 6 → 8. Each phase
 - `[Story]` labels map each task to the spec user story for traceability
 - Every new test file must have `// @req REQ-*` tags immediately before each `it()` block — required by Principle I
 - `npm test` runs both Vitest and the traceability checker; run it after every phase checkpoint
-- `DB/cache/jsonFileCache.ts` is **not** deleted — still used by `syncRouter.ts` for `data/sync-config.json` and by `runMigrationCleanup` for the sentinel file
-- `DB/cache/cacheEviction.ts` is **not** modified — it evicts month-subdirectory caches, not `metrics-result/`
+- `databaselayer/cache/jsonFileCache.ts` is **not** deleted — still used by `syncRouter.ts` for `data/sync-config.json` and by `runMigrationCleanup` for the sentinel file
+- `databaselayer/cache/cacheEviction.ts` is **not** modified — it evicts month-subdirectory caches, not `metrics-result/`
 - After Phase 3, `data/cache/metricsCache.ts` no longer imports from `jsonFileCache.ts` — confirm no circular dependency issues

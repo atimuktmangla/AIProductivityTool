@@ -243,7 +243,7 @@ The Sync Jobs tab offers three modes:
 ### 4.9 Input validation
 
 <!-- REQ-4.9-1 --> `developerIds` array must have at least 1 and at most 50 entries; exceeding 50 returns HTTP 400.
-<!-- REQ-4.9-6 --> All `/api/*` routes MUST require an `Authorization: Bearer <token>` header. Absent or malformed headers return HTTP 401 with body `{ "error": "unauthorized" }`. The token MUST be compared against the `API_KEY` env var using a constant-time comparison to prevent timing attacks.
+<!-- REQ-4.9-6 --> All `/api/*` routes MUST require an `X-Api-Key: <token>` header. Absent or invalid headers return HTTP 401 with body `{ "error": "Unauthorized — provide a valid X-Api-Key header" }`. The token MUST be compared against the `API_KEY` env var using a constant-time comparison to prevent timing attacks.
 <!-- REQ-4.9-2 --> Date range must not exceed 366 days; exceeding returns HTTP 400.
 <!-- REQ-4.9-3 --> Leading/trailing whitespace in `developerIds` entries is trimmed before processing.
 <!-- REQ-4.9-4 --> Each `repoTargets` entry `projectKey` must match `/^[A-Z][A-Z0-9_]{0,9}$/`; `repoSlug` must match `/^[a-z0-9_.\-]{1,128}$/`. Any entry failing either pattern returns HTTP 400 with field description.
@@ -262,7 +262,7 @@ The Sync Jobs tab offers three modes:
 - Q: What is the hard concurrency cap for outbound Bitbucket/Jira API calls during a live report? → A: Configurable `MAX_CONCURRENT_API_CALLS` env var, default 50.
 - Q: Should `repoTargets` and `projectKeys` fields be validated at the HTTP boundary? → A: Yes — validate `projectKey` format (`/^[A-Z][A-Z0-9_]{0,9}$/`) and `repoSlug` format (`/^[a-z0-9_.-]{1,128}$/`); return HTTP 400 on violation.
 - Q: What happens when `POST /sync/trigger` is called while a sync is already running? → A: Return HTTP 409 Conflict with `{ "error": "sync_in_progress", "runId": "<activeRunId>" }`.
-- Q: What is the API key validation contract for all `/api/*` routes? → A: `Authorization: Bearer <token>` required; HTTP 401 on absent/malformed; constant-time compare against `API_KEY` env var.
+- Q: What is the API key validation contract for all `/api/*` routes? → A: `X-Api-Key: <token>` header required; HTTP 401 on absent/invalid; constant-time compare against `API_KEY` env var.
 
 ---
 
@@ -271,7 +271,7 @@ The Sync Jobs tab offers three modes:
 <!-- REQ-4.12-1 --> On server startup the system MUST initialise a single in-memory SQLite (`:memory:`) instance and create all required tables before accepting any API requests. If initialisation fails for any reason (e.g., missing native binary, Node ABI mismatch) the server MUST abort startup immediately with a structured error message naming the likely cause and exit with a non-zero code within 5 seconds. Degraded silent operation is not permitted.
 <!-- REQ-4.12-2 --> The system MUST store computed developer metrics (keyed by `developerId`, `startDate`, and `endDate`) together with a `cachedAt` Unix-ms timestamp in the in-memory store, and retrieve them as hits (entries within `maxAgeMs`) or misses (absent or stale) — preserving the existing `getCachedMetrics` / `setCachedMetrics` public signatures unchanged.
 <!-- REQ-4.12-3 --> The system MUST store sync run logs (`runId`, timestamps, `durationMs`, `totalUsers`, per-batch detail) in the in-memory store immediately after each sync run completes, support listing the last N logs ordered by `startedAt` descending, and support purging all logs — preserving the existing `writeRunLog` / `listRunLogs` / `purgeRunLogs` internal/public signatures unchanged.
-<!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `DB/store/inMemoryDb.ts`; all other modules import from there.
+<!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `databaselayer/store/inMemoryDb.ts`; all other modules import from there.
 <!-- REQ-4.12-5 --> After this migration the system MUST NOT write any new `data/cache/metrics-result/*.json` or `data/sync-logs/*.json` files. On first startup after deployment — detected by the absence of sentinel file `data/.migrated-to-sqlite` — the system MUST attempt to delete both legacy directories, log a one-time migration notice, write the sentinel file, and continue normally regardless of whether deletion succeeds (non-blocking; warn on failure). Subsequent startups skip the cleanup because the sentinel file is present.
 
 <!-- REQ-002-FR-001 --> The sync status endpoint MUST return at most 50 completed users (the most recent 50 by completion order) in the `completedUsers` field. The `totalSyncUsers` field MUST always reflect the true count of users in the run regardless of the cap. The `failedUsers` array MUST never be truncated.

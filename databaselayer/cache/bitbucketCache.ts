@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { getConfig } from '../../BL/config/env.js';
+import { getConfig } from '../../backend/config/env.js';
 import { readJsonCache, writeJsonCache } from './jsonFileCache.js';
 import {
   getCommitsByAuthor,

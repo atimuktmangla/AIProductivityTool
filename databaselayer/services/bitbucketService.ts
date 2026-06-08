@@ -1,4 +1,4 @@
-import { getConfig } from "../../BL/config/env.js";
+import { getConfig } from "../../backend/config/env.js";
 import { atlassianGet } from "../client/atlassianFetch.js";
 import { makeTtlCache, makeKeyedTtlCache } from "../cache/ttlCache.js";
 import type {

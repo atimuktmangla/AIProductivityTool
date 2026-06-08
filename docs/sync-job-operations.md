@@ -19,7 +19,7 @@ Configuration is stored in `data/sync-config.json` — a plain JSON file on disk
 }
 ```
 
-`data/sync-config.json` is written atomically (temp file + rename via `DB/cache/jsonFileCache.ts`) so a crash mid-write cannot corrupt the saved config.
+`data/sync-config.json` is written atomically (temp file + rename via `databaselayer/cache/jsonFileCache.ts`) so a crash mid-write cannot corrupt the saved config.
 
 **Once you save a Daily or Weekly schedule from the UI, it survives server restarts.** On every boot `startMetricsSyncJob()` reads this file first and restores the schedule automatically — no manual re-configuration needed.
 
@@ -149,7 +149,7 @@ All endpoints require the `X-Api-Key` header.
 
 ## Metrics validation
 
-After each user's metrics are computed, `BL/evals/metricsValidator.ts` runs a sanity check on the output. It does not throw or block the sync — it logs console warnings for any anomalies:
+After each user's metrics are computed, `backend/evals/metricsValidator.ts` runs a sanity check on the output. It does not throw or block the sync — it logs console warnings for any anomalies:
 
 | Check | Threshold |
 |-------|-----------|
@@ -171,12 +171,12 @@ If warnings appear in server logs (`[evals] Metric validation warnings: [...]`),
 | File | Role |
 |------|------|
 | `jobs/metricsSync.ts` | Scheduler, state, batch runner, run log writer |
-| `WEB/routes/syncRouter.ts` | API endpoints — config, trigger, status, logs |
+| `api/routes/syncRouter.ts` | API endpoints — config, trigger, status, logs |
 | `server.ts` | Calls `startMetricsSyncJob()` at boot |
-| `BL/config/env.ts` | Env var defaults (`SYNC_DEVELOPER_IDS`, `SYNC_INTERVAL_MINUTES`) |
-| `DB/cache/jsonFileCache.ts` | Atomic file read/write for `data/sync-config.json` |
-| `BL/evals/metricsValidator.ts` | Post-run data quality checks |
-| `UI/src/components/SyncPage.tsx` | Admin UI page |
-| `UI/src/hooks/useSync.ts` | Fetch/poll/save logic for the UI |
+| `backend/config/env.ts` | Env var defaults (`SYNC_DEVELOPER_IDS`, `SYNC_INTERVAL_MINUTES`) |
+| `databaselayer/cache/jsonFileCache.ts` | Atomic file read/write for `data/sync-config.json` |
+| `backend/evals/metricsValidator.ts` | Post-run data quality checks |
+| `frontend/src/components/SyncPage.tsx` | Admin UI page |
+| `frontend/src/hooks/useSync.ts` | Fetch/poll/save logic for the UI |
 | `data/sync-config.json` | Persisted schedule config (created on first save) |
 | `data/sync-logs/` | Per-run JSON log files |
