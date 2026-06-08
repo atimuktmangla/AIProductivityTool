@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Triggers a delta cache warm-up for the AI Productivity Tool.
@@ -6,7 +6,7 @@
     Exit code 0 = success (HTTP 2xx), Exit code 1 = error.
 
 .DESCRIPTION
-    Reads PORT and API_KEY from a .env file in the project root.
+    Reads PORT and VITE_API_KEY from a .env file in the project root.
     Falls back to localhost:3000 if the file is absent or the key is unset.
 
 .EXAMPLE
@@ -18,12 +18,12 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Resolve project root (one level up from scripts/)
-$scriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
+# ── Resolve project root (one level up from scripts/) ────────────────────────
+$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptDir
 $envFile     = Join-Path $projectRoot '.env'
 
-# Parse .env file
+# ── Parse .env file ───────────────────────────────────────────────────────────
 $port   = 3000
 $apiKey = ''
 
@@ -33,23 +33,23 @@ if (Test-Path $envFile) {
         if ($line -eq '' -or $line.StartsWith('#')) { return }
         $parts = $line -split '=', 2
         if ($parts.Length -ne 2) { return }
-        $k = $parts[0].Trim()
-        $v = $parts[1].Trim().Trim('"').Trim("'")
-        if ($k -eq 'PORT' -or $k -eq 'VITE_DEV_PORT') {
+        $key = $parts[0].Trim()
+        $val = $parts[1].Trim().Trim('"').Trim("'")
+        if ($key -eq 'PORT' -or $key -eq 'VITE_DEV_PORT') {
             $parsed = 0
-            if ([int]::TryParse($v, [ref]$parsed) -and $parsed -gt 0) {
+            if ([int]::TryParse($val, [ref]$parsed) -and $parsed -gt 0) {
                 $port = $parsed
             }
         }
-        if ($k -eq 'API_KEY' -or $k -eq 'VITE_API_KEY') {
-            $apiKey = $v
+        if ($key -eq 'VITE_API_KEY') {
+            $apiKey = $val
         }
     }
 } else {
     Write-Warning "No .env file found at $envFile - using defaults (localhost:$port, no API key)"
 }
 
-# Call the warmup endpoint
+# ── Call the warmup endpoint ──────────────────────────────────────────────────
 $url = "http://localhost:$port/api/dashboard/sync/warmup"
 
 try {
@@ -69,30 +69,25 @@ try {
     if ($body.queued -eq 0) {
         Write-Host "Skipped: $($body.skipped) (cached). Queued: 0. Nothing to warm."
     } else {
-        Write-Host "Skipped: $($body.skipped) (cached). Queued: $($body.queued) - $($body.queuedUsers -join ', ')."
+        Write-Host "Skipped: $($body.skipped) (cached). Queued: $($body.queued)."
     }
     exit 0
 }
 catch [System.Net.WebException] {
+    $status = $null
     if ($_.Exception.Response) {
         $status = [int]$_.Exception.Response.StatusCode
-        $stream  = $_.Exception.Response.GetResponseStream()
-        $reader  = [System.IO.StreamReader]::new($stream)
+        $stream = $_.Exception.Response.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
         $errBody = $reader.ReadToEnd()
-        if ($status -eq 409) {
-            # Sync already running - not a failure for a scheduled job
-            try   { $runId = ($errBody | ConvertFrom-Json).runId }
-            catch { $runId = 'unknown' }
-            Write-Host "Sync already running (runId=$runId). Skipping warm-up."
-            exit 0
-        }
-        Write-Error "HTTP $status - $errBody"
+        Write-Error "Error: HTTP $status — $errBody"
     } else {
-        Write-Error "Unable to connect to $url. Is the server running?"
+        Write-Error "Error: Unable to connect to $url. Is the server running?"
     }
     exit 1
 }
 catch {
-    Write-Error "Unexpected error: $($_.Exception.Message)"
+    Write-Error "Error: $_"
     exit 1
 }
+

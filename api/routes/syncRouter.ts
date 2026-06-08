@@ -1,8 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { readJsonCache, writeJsonCache } from '../../databaselayer/cache/jsonFileCache.js';
+import { getAllUsers } from '../../databaselayer/services/bitbucketService.js';
 import {
   getSyncStatus,
   triggerSyncForUsers,
+  cancelSync,
   rescheduleInterval,
   listRunLogs,
   purgeRunLogs,
@@ -39,6 +41,42 @@ syncRouter.post('/trigger', async (req: Request, res: Response, next: NextFuncti
 
     triggerSyncForUsers(developerIds as string[]);
     res.status(202).json({ queued: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── DELETE /run ───────────────────────────────────────────────────────────────
+
+syncRouter.delete('/run', (_req: Request, res: Response) => {
+  const status = getSyncStatus();
+  if (!status.running) {
+    res.status(404).json({ error: 'no_active_run', detail: 'No sync is currently running.' });
+    return;
+  }
+  cancelSync();
+  res.json({ cancelled: true, detail: 'Cancel requested. Current batch will complete; subsequent batches will be skipped.' });
+});
+
+// ── POST /trigger-all ─────────────────────────────────────────────────────────
+
+syncRouter.post('/trigger-all', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = getSyncStatus();
+    if (status.running) {
+      res.status(409).json({ error: 'sync_in_progress', runId: status.activeUsers });
+      return;
+    }
+
+    const users = await getAllUsers();
+    if (users.length === 0) {
+      res.status(400).json({ error: 'no_users_found', detail: 'Bitbucket returned no users.' });
+      return;
+    }
+
+    const developerIds = users.map((u) => u.name);
+    triggerSyncForUsers(developerIds);
+    res.status(202).json({ queued: true, total: developerIds.length });
   } catch (e) {
     next(e);
   }

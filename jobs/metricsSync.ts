@@ -9,6 +9,7 @@ export const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches dashbo
 // ── Module-level state ────────────────────────────────────────────────────────
 
 let running            = false;
+let cancelRequested    = false;
 let lastRunAt:   number | null = null;
 let nextRunAt:   number | null = null;
 let runStartedAt: number | null = null;
@@ -171,9 +172,15 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
 
   const batchLogs: SyncBatchLog[] = [];
 
+  cancelRequested = false;
+
   try {
     // Process each batch of 6 users in parallel; batches run sequentially.
     for (let i = 0; i < chunks.length; i++) {
+      if (cancelRequested) {
+        console.log(`[sync] run ${runId} cancelled before batch ${i + 1}`);
+        break;
+      }
       const batch      = chunks[i];
       const batchStart = Date.now();
 
@@ -255,9 +262,10 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
     await writeRunLog(runLog).catch((e) => console.warn('[sync] failed to write run log:', e));
     lastRunAt = finishedAt;
   } finally {
-    running        = false;
-    runStartedAt   = null;
-    activeUsers    = [];
+    running          = false;
+    cancelRequested  = false;
+    runStartedAt     = null;
+    activeUsers      = [];
   }
 }
 
@@ -277,6 +285,15 @@ export function getSyncStatus(): SyncStatus {
     intervalMinutes: configuredInterval,
     scheduledTime:   configuredTime,
   };
+}
+
+/**
+ * Requests cancellation of the active sync run.
+ * The current batch completes; the next batch is skipped.
+ * No-op when no run is active.
+ */
+export function cancelSync(): void {
+  if (running) cancelRequested = true;
 }
 
 /** Triggers a sync for the given developer IDs. Non-blocking — does not await. */
