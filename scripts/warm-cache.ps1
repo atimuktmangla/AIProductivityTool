@@ -50,7 +50,7 @@ if (Test-Path $envFile) {
 }
 
 # Call the warmup endpoint
-$url = "http://localhost:$port/api/dashboard/sync/warmup"
+$url = "http://127.0.0.1:$port/api/dashboard/sync/warmup"
 
 try {
     $headers = @{ 'Content-Type' = 'application/json' }

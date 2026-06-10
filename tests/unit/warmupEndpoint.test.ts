@@ -126,6 +126,21 @@ describe('POST /sync/warmup (REQ-002-FR-006)', () => {
     expect(res.body.queuedUsers).toEqual(['bob']);
   });
 
+  // @req REQ-002-FR-006 REQ-004-FR-010
+  it('accepts explicit developerIds in body without sync-config', async () => {
+    readJsonCacheMock.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post('/sync/warmup')
+      .set('X-Api-Key', 'test-key')
+      .send({ developerIds: ['carol', 'dave'] });
+
+    expect(res.status).toBe(202);
+    expect(res.body.queued).toBe(2);
+    expect(res.body.queuedUsers).toEqual(['carol', 'dave']);
+    expect(res.body.skipped).toBe(0);
+  });
+
   // @req REQ-002-FR-006
   it('returns 409 when a sync is already running', async () => {
     readJsonCacheMock.mockResolvedValue({

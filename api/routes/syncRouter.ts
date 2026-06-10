@@ -252,19 +252,30 @@ syncRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
 
 // ── POST /warmup ──────────────────────────────────────────────────────────────
 
-syncRouter.post('/warmup', async (_req: Request, res: Response, next: NextFunction) => {
+syncRouter.post('/warmup', async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (getSyncStatus().running) {
       res.status(409).json({ error: 'A sync is already running' });
       return;
     }
 
+    const body = req.body as { developerIds?: unknown };
     let configuredUserIds: string[] = [];
-    try {
-      const file = await readJsonCache<{ developerIds: string[] }>(SYNC_CONFIG_PATH);
-      configuredUserIds = file?.developerIds ?? [];
-    } catch {
-      // Unreadable config — treat as no users
+
+    if (Array.isArray(body.developerIds) && body.developerIds.length > 0) {
+      const err = validateDeveloperIds(body.developerIds);
+      if (err) {
+        res.status(400).json({ error: err });
+        return;
+      }
+      configuredUserIds = body.developerIds as string[];
+    } else {
+      try {
+        const file = await readJsonCache<{ developerIds: string[] }>(SYNC_CONFIG_PATH);
+        configuredUserIds = file?.developerIds ?? [];
+      } catch {
+        // Unreadable config — treat as no users
+      }
     }
 
     if (configuredUserIds.length === 0) {
