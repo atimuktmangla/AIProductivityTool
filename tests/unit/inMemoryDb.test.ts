@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, getDb, _resetForTesting, AppStoreNotInitialisedError } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, getDb, _resetForTesting, AppStoreNotInitialisedError } from '../../databaselayer/store/appStore.js';
 
-describe('inMemoryDb', () => {
+describe('appStore', () => {
   beforeEach(() => {
     _resetForTesting();
   });
 
   // @req REQ-4.12-1
   it('creates metrics_cache and sync_run_logs tables after init', () => {
-    initInMemoryDb();
+    initAppStore(':memory:');
     const db = getDb();
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
@@ -20,20 +20,20 @@ describe('inMemoryDb', () => {
 
   // @req REQ-4.12-4
   it('getDb returns the same instance on repeated calls', () => {
-    initInMemoryDb();
+    initAppStore(':memory:');
     const a = getDb();
     const b = getDb();
     expect(a).toBe(b);
   });
 
   // @req REQ-4.12-4
-  it('initInMemoryDb is idempotent — calling it twice does not throw', () => {
-    initInMemoryDb();
-    expect(() => initInMemoryDb()).not.toThrow();
+  it('initAppStore is idempotent — calling it twice does not throw', () => {
+    initAppStore(':memory:');
+    expect(() => initAppStore(':memory:')).not.toThrow();
   });
 
   // @req REQ-4.12-1
-  it('getDb throws AppStoreNotInitialisedError when called before initInMemoryDb', () => {
+  it('getDb throws AppStoreNotInitialisedError when called before initAppStore', () => {
     expect(() => getDb()).toThrow(AppStoreNotInitialisedError);
   });
 });

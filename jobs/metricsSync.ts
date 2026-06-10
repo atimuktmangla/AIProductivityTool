@@ -1,10 +1,13 @@
 import { getConfig } from '../backend/config/env.js';
-import { aggregateMetrics } from '../backend/metrics/aggregator.js';
-import { getCachedMetrics, setCachedMetrics } from '../databaselayer/cache/metricsCache.js';
+import { getCachedMetrics } from '../databaselayer/cache/metricsCache.js';
+import { resolveMetricsFromCache } from '../backend/metrics/cacheResolution.js';
+import { purgeCachedMetrics, markCurrentMonthStale } from '../databaselayer/cache/metricsCache.js';
+import { getCachedIssueChangelog } from '../databaselayer/cache/jiraChangelogCache.js';
+import { getDb } from '../databaselayer/store/appStore.js';
+import { METRICS_SQLITE_TTL_MS, METRICS_CACHE_TTL_MS } from '../backend/config/cacheTtl.js';
 import { readJsonCache } from '../databaselayer/cache/jsonFileCache.js';
-import { getDb } from '../databaselayer/store/inMemoryDb.js';
 
-export const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — matches dashboard TTL
+export { METRICS_CACHE_TTL_MS, METRICS_SQLITE_TTL_MS };
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -128,6 +131,25 @@ function syncConfigPath(): string {
   return 'data/sync-config.json';
 }
 
+export function jiraKeysFromPrTitles(prs: { title: string }[]): string[] {
+  const keySet = new Set<string>();
+  for (const pr of prs) {
+    for (const m of pr.title.match(/([A-Z]+-\d+)/g) ?? []) keySet.add(m);
+  }
+  return [...keySet];
+}
+
+export async function prewarmChangelogCacheForMetric(
+  metric: { prs?: { title: string }[] },
+): Promise<void> {
+  if (!getConfig().specMetricsEnabled) return;
+  await Promise.all(
+    jiraKeysFromPrTitles(metric.prs ?? []).map((key) =>
+      getCachedIssueChangelog(key).catch(() => null),
+    ),
+  );
+}
+
 async function readSyncConfig(): Promise<SyncConfig | null> {
   return readJsonCache<SyncConfig>(syncConfigPath());
 }
@@ -192,8 +214,8 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
         batch.map(async (userId) => {
           // Cache-skip: promote fresh cache hits without calling the upstream API
           try {
-            const { hits } = await getCachedMetrics([userId], startDate, endDate, METRICS_CACHE_TTL_MS);
-            if (hits.length > 0) {
+            const cache = await getCachedMetrics([userId], startDate, endDate, METRICS_SQLITE_TTL_MS);
+            if (cache.misses.length === 0 && cache.gapRefresh.length === 0 && cache.hits.length > 0) {
               console.log(`[sync] user ${userId} — cache hit, skipping fetch`);
               return { userId, source: 'cache' as const };
             }
@@ -206,11 +228,13 @@ async function runSync(overrideDevIds?: string[]): Promise<void> {
           const timeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error(`timed out after ${USER_TIMEOUT_MS / 60_000} min`)), USER_TIMEOUT_MS),
           );
-          const result = await Promise.race([
-            aggregateMetrics({ developerIds: [userId], startDate, endDate }),
+          const resolved = await Promise.race([
+            resolveMetricsFromCache([userId], startDate, endDate, METRICS_SQLITE_TTL_MS),
             timeout,
           ]);
-          await setCachedMetrics([userId], startDate, endDate, result.current);
+          if (getConfig().specMetricsEnabled && resolved.metrics[0]) {
+            await prewarmChangelogCacheForMetric(resolved.metrics[0]);
+          }
           console.log(`[sync] user ${userId} — done in ${((Date.now() - userStart) / 1000).toFixed(1)}s`);
           return { userId, source: 'live' as const };
         }),
@@ -301,6 +325,23 @@ export function triggerSyncForUsers(developerIds: string[]): void {
   configuredUsers = developerIds;
   // Fire and forget; errors are logged inside runSync
   runSync(developerIds).catch((e) => console.error('[sync] trigger error:', e));
+}
+
+export type RefreshScope = 'current-month' | 'full';
+
+/** Queues cache refresh for configured developers. Non-blocking. */
+export function triggerRefreshForUsers(
+  developerIds: string[],
+  scope: RefreshScope = 'current-month',
+): void {
+  configuredUsers = developerIds;
+  if (scope === 'full') {
+    purgeCachedMetrics(developerIds);
+    runSync(developerIds).catch((e) => console.error('[sync] refresh error:', e));
+    return;
+  }
+  markCurrentMonthStale(developerIds);
+  runSync(developerIds).catch((e) => console.error('[sync] refresh error:', e));
 }
 
 /**

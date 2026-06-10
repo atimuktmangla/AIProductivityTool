@@ -147,9 +147,9 @@ All public TypeScript interfaces used across layers. The frontend mirrors these 
 
 #### 5.3.1 Commits
 
-- **FR-5.3.1-1** Source: `GET /rest/api/1.0/projects/{key}/repos/{slug}/commits?author={slug}`
-- **FR-5.3.1-2** Date filtering applied in-memory on `authorTimestamp` (Bitbucket does not support date params on this endpoint).
-- **FR-5.3.1-3** All resolved repos are scanned per developer.
+- **FR-5.3.1-1** Dashboard **total commits** are the sum of `commitCount` on merged pull requests in the date window (from PR detail cache), not a repository-wide commit-log scan.
+- **FR-5.3.1-2** Auxiliary scripts that need raw commit history use month-partitioned Bitbucket commit cache (`data/cache/{YYYY-MM}/commits/`).
+- **FR-5.3.1-3** The aggregator hot path does not paginate `GET .../commits` per repo.
 
 #### 5.3.2 Pull Requests
 
@@ -354,12 +354,12 @@ A composite from four equal-weighted signals (25% each):
 
 ## 8. Known limitations
 
-- Bitbucket `/commits` does not support date params; all commits are fetched newest-first and scanned until `authorTimestamp < sinceMs`. Very long repo histories can be slow.
-- The Jira `development[pullrequests].all > 0` JQL filter requires the Jira DVCS connector to be configured.
+Remediated items are documented in `specs/003-performance-resilience/` (hybrid Jira linking, changelog cache, PR-based commits, persistent SQLite store).
+
+Remaining limitations:
+
 - Tier-3 auto-discovery relies on `/profile/recent/repos` — very old inactive repos may be missed.
-- Spec-driven metrics add one Jira changelog call per linked issue. On large teams with many issues, use the background sync job to absorb this cost.
 - Post-merge rework detection is keyword-based on commit messages. Inconsistent commit conventions may under-report churn.
-- The in-memory SQLite store is not persisted across server restarts — metrics cache is cleared on each restart, requiring a fresh sync run or live computation.
 
 ---
 

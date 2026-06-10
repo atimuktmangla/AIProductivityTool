@@ -88,7 +88,10 @@ Repositories to scan are resolved via a three-tier priority system:
 
 #### 4.4.1 Commits
 
-<!-- REQ-4.4.1-1 --> Source: `GET /rest/api/1.0/projects/{key}/repos/{slug}/commits?author={slug}`
+<!-- REQ-4.4.1-1 --> **Total commits** are the sum of commit counts on merged pull requests authored in the date window (via `getCachedPRDetails`), not a full repository commit-log scan.
+<!-- REQ-003-FR-010 --> Dashboard commit throughput MUST be derived from commits on merged PRs in the date window.
+<!-- REQ-003-FR-011 --> Auxiliary repository-level commit fetches (scripts) partition by calendar month with write-once closed-month cache.
+<!-- REQ-003-FR-012 --> On cache hit for a closed month, zero upstream commit pagination is required per developer-repository pair.
 <!-- REQ-4.4.1-2 --> Date filtering applied in-memory on `authorTimestamp` (Bitbucket date params accept only commit SHAs, not dates).
 <!-- REQ-4.4.1-3 --> All resolved repos are scanned per developer.
 
@@ -113,9 +116,26 @@ Issues are sourced two ways:
 
 ##### 4.4.4a Assignee JQL
 
+<!-- REQ-003-FR-001 --> Issue linking mode is configured via `JIRA_ISSUE_LINKING_MODE` (`connector` | `assignee` | `hybrid`; default `hybrid`).
+<!-- REQ-003-FR-002 --> In `hybrid` mode, when connector JQL returns zero results or fails, the system retries with assignee-only JQL and sets `fallbackEngaged` in `/ready`.
+<!-- REQ-003-FR-003 --> PR-title-extracted ticket keys are always merged with assignee-based results, deduplicated by issue key via `mergeIssuesByKey`.
+<!-- REQ-003-FR-004 --> Work-type and code-quality metric shapes are identical regardless of linking mode.
+<!-- REQ-003-FR-005 --> `GET /ready` includes `jiraLinking` with `mode`, `connectorAvailable`, and `fallbackEngaged`.
+
+**Connector JQL** (when mode is `connector` or as first attempt in `hybrid`):
+
 ```
 assignee in ("slug1","slug2")
 AND development[pullrequests].all > 0
+AND updated >= "YYYY-MM-DD"
+AND updated <= "YYYY-MM-DD"
+ORDER BY updated DESC
+```
+
+**Assignee-only JQL** (when mode is `assignee` or as hybrid fallback):
+
+```
+assignee = "slug"
 AND updated >= "YYYY-MM-DD"
 AND updated <= "YYYY-MM-DD"
 ORDER BY updated DESC
@@ -268,11 +288,29 @@ The Sync Jobs tab offers three modes:
 
 ### 4.12 In-memory SQLite storage (migration from JSON cache files)
 
-<!-- REQ-4.12-1 --> On server startup the system MUST initialise a single in-memory SQLite (`:memory:`) instance and create all required tables before accepting any API requests. If initialisation fails for any reason (e.g., missing native binary, Node ABI mismatch) the server MUST abort startup immediately with a structured error message naming the likely cause and exit with a non-zero code within 5 seconds. Degraded silent operation is not permitted.
-<!-- REQ-4.12-2 --> The system MUST store computed developer metrics (keyed by `developerId`, `startDate`, and `endDate`) together with a `cachedAt` Unix-ms timestamp in the in-memory store, and retrieve them as hits (entries within `maxAgeMs`) or misses (absent or stale) — preserving the existing `getCachedMetrics` / `setCachedMetrics` public signatures unchanged.
-<!-- REQ-4.12-3 --> The system MUST store sync run logs (`runId`, timestamps, `durationMs`, `totalUsers`, per-batch detail) in the in-memory store immediately after each sync run completes, support listing the last N logs ordered by `startedAt` descending, and support purging all logs — preserving the existing `writeRunLog` / `listRunLogs` / `purgeRunLogs` internal/public signatures unchanged.
-<!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `databaselayer/store/inMemoryDb.ts`; all other modules import from there.
-<!-- REQ-4.12-5 --> After this migration the system MUST NOT write any new `data/cache/metrics-result/*.json` or `data/sync-logs/*.json` files. On first startup after deployment — detected by the absence of sentinel file `data/.migrated-to-sqlite` — the system MUST attempt to delete both legacy directories, log a one-time migration notice, write the sentinel file, and continue normally regardless of whether deletion succeeds (non-blocking; warn on failure). Subsequent startups skip the cleanup because the sentinel file is present.
+<!-- REQ-4.12-1 --> On server startup the system MUST initialise a single SQLite instance at `APP_STORE_PATH` (default `data/cache/app-store.sqlite`) with WAL mode and create all required tables before accepting any API requests. If initialisation fails the server MUST abort startup immediately with a structured error and exit with a non-zero code within 5 seconds.
+<!-- REQ-003-FR-013 --> Developer metrics cache entries survive server restart when younger than the configured freshness window.
+<!-- REQ-003-FR-014 --> Store path is configurable via `APP_STORE_PATH`; default under git-ignored `data/cache/`.
+<!-- REQ-003-FR-015 --> Per-developer JSON metrics files (`data/cache/metrics-result/*.json`) MUST NOT be reintroduced.
+<!-- REQ-003-FR-016 --> Startup MUST fail fast if the store file is corrupt or unreadable.
+<!-- REQ-003-FR-017 --> Changelog cache TTL remains 1 hour (`METRICS_CACHE_TTL_MS`); SQLite metrics age expiry is controlled separately via `METRICS_SQLITE_TTL_MS` (default 0 = no age expiry).
+<!-- REQ-004-FR-001 --> SQLite metrics cache MUST NOT expire by age by default (`METRICS_SQLITE_TTL_MS` default `0`).
+<!-- REQ-004-FR-002 --> Rolling 90-day requests MUST resolve cache via `window_kind=rolling-90` plus developer id (not exact date pair alone).
+<!-- REQ-004-FR-003 --> Fixed date-range requests MUST use exact `(developerId, startDate, endDate)` lookup with `window_kind=fixed`.
+<!-- REQ-004-FR-004 --> When a rolling cache hit exists but the window end advanced or calendar month changed, the system MUST refresh the gap slice only and merge into the stored metric.
+<!-- REQ-004-FR-005 --> Closed calendar months MUST NOT trigger upstream calls when a write-once JSON month cache exists.
+<!-- REQ-004-FR-006 --> Open PR fetch MUST use per-repo monthly JSON envelope with update cursor (delta merge within current month).
+<!-- REQ-004-FR-007 --> Reviewed PR fetch MUST use per-repo monthly JSON envelope with update cursor (delta from `cursorUpdatedMs`).
+<!-- REQ-004-FR-008 --> Jira issue search MUST use per-developer monthly JSON envelope with `updated` cursor (delta JQL).
+<!-- REQ-004-FR-009 --> `POST /api/dashboard/sync/refresh` MUST accept `scope: current-month | full` (default `current-month`) and return HTTP 202 with queued count.
+<!-- REQ-004-FR-010 --> Sync job and dashboard MUST share `resolveMetricsFromCache` for partial hits, gap merge, and cache writes.
+<!-- REQ-004-FR-011 --> Metrics API response MUST expose `cacheStatus` values `full`, `partial`, or `gap-merged` when served from cache resolution.
+<!-- REQ-4.12-2 --> The system MUST store computed developer metrics (keyed by `developerId`, `startDate`, and `endDate`) together with a `cachedAt` Unix-ms timestamp in the store, and retrieve them as hits (entries within `maxAgeMs`) or misses (absent or stale) — preserving the existing `getCachedMetrics` / `setCachedMetrics` public signatures unchanged.
+<!-- REQ-4.12-3 --> The system MUST store sync run logs (`runId`, timestamps, `durationMs`, `totalUsers`, per-batch detail) in the store immediately after each sync run completes, support listing the last N logs ordered by `startedAt` descending, and support purging all logs — preserving the existing `writeRunLog` / `listRunLogs` / `purgeRunLogs` internal/public signatures unchanged.
+<!-- REQ-4.12-4 --> A single shared store instance MUST be used; no second connection or parallel store instance may be created. The singleton connection MUST be owned by `databaselayer/store/appStore.ts`; all other modules import from there.
+<!-- REQ-4.12-5 --> After the SQLite migration the system MUST NOT write any new `data/cache/metrics-result/*.json` or `data/sync-logs/*.json` files. On first startup after deployment — detected by the absence of sentinel file `data/.migrated-to-sqlite` — the system MUST attempt to delete both legacy directories, log a one-time migration notice, write the sentinel file, and continue normally regardless of whether deletion succeeds (non-blocking; warn on failure). Subsequent startups skip the cleanup because the sentinel file is present.
+<!-- REQ-003-FR-018 --> Jira linking, changelog cache, commit formalisation, and persistent store are independently deployable feature slices.
+<!-- REQ-003-FR-019 --> Known limitations in baseline spec are updated when each remediation ships.
 
 <!-- REQ-002-FR-001 --> The sync status endpoint MUST return at most 50 completed users (the most recent 50 by completion order) in the `completedUsers` field. The `totalSyncUsers` field MUST always reflect the true count of users in the run regardless of the cap. The `failedUsers` array MUST never be truncated.
 <!-- REQ-002-FR-003 --> When a manual sync run is triggered, the system MUST check the SQLite metrics cache for each user before calling the upstream metrics API. Users with a cache entry younger than 1 hour MUST be promoted to completed immediately without any upstream API call.
@@ -385,14 +423,22 @@ See [../README.md](../README.md#configuration) for all environment variables.
 ### 9.5 Aggregation
 
 <!-- REQ-9.5-1 --> Per-issue `SpecDrivenMetrics` objects are computed in parallel (bounded by `repoConcurrency`). Issues for which the changelog cannot be fetched are silently excluded.
+<!-- REQ-003-FR-006 --> When spec metrics are enabled, ticket change history is cached after first fetch and reused within `METRICS_CACHE_TTL_MS` (1 hour).
+<!-- REQ-003-FR-007 --> The background sync job pre-warms changelog cache for PR-title-linked keys after each live user sync when spec metrics are enabled.
+<!-- REQ-003-FR-008 --> Changelog fetch failures remain non-blocking (issues excluded from spec aggregates).
+<!-- REQ-003-FR-009 --> Closed-month changelog cache entries are write-once; current-month entries refresh when TTL expires.
 <!-- REQ-9.5-2 --> Developer-level `specMetrics` is the average of all per-issue values for phased times and clarification delay; `specRegressions` and `postMergeReworkCommits` are totals; `specAdherenceScore` is the average of per-issue scores; `firstPassYield` is `true` only when totals are both zero.
 
 ---
 
 ## 10. Known limitations
 
-- The Bitbucket `/commits` endpoint does not support date-range params; all commits are fetched newest-first and scanned until the start date, which may be slow on repos with very long histories.
-- The Jira `development[pullrequests].all > 0` JQL filter requires the Jira DVCS connector to be configured on the Jira instance.
 - Tier-3 auto-discovery relies on `/profile/recent/repos`, which only returns repos the user has recently pushed to — very old repos may be missed without Tier-1 or Tier-2 configuration.
-- Spec-driven metrics add one Jira changelog API call per linked issue. On large teams with many Jira issues per developer, this may noticeably increase response time. Use the background sync job to absorb this cost offline.
 - Post-merge rework detection is keyword-based on commit messages. Teams with inconsistent commit message conventions may see underreported churn.
+
+**Resolved in `specs/003-performance-resilience/`:**
+
+- ~~Bitbucket `/commits` date-range scanning on long repo histories~~ — commit throughput is PR-based; auxiliary commit cache uses month partitioning.
+- ~~Jira DVCS connector required for issue linking~~ — hybrid/assignee linking modes with `/ready` status.
+- ~~In-memory cache lost on restart~~ — file-backed SQLite at `APP_STORE_PATH`.
+- ~~Spec metrics N+1 changelog fetches~~ — changelog cache with sync pre-warm.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 
 // Seed module state via the exported getSyncStatus — we manipulate the internal
 // arrays by triggering getSyncStatus after manually populating them through a
@@ -8,7 +8,7 @@ import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMe
 describe('getSyncStatus completedUsers cap (REQ-002-FR-001)', () => {
   beforeEach(() => {
     _resetForTesting();
-    initInMemoryDb();
+    initAppStore(':memory:');
   });
 
   // @req REQ-002-FR-001

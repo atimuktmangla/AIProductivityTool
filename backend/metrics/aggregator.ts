@@ -1,8 +1,7 @@
 import { getConfig } from '../config/env.js';
-import { searchIssuesByAssignees, getIssuesByKeys } from '../../databaselayer/services/jiraService.js';
+import { searchIssuesForDeveloper, getIssuesByKeys, resetFallbackEngaged, mergeIssuesByKey } from '../../databaselayer/services/jiraService.js';
+import { getCachedIssuesForDeveloper } from '../../databaselayer/cache/jiraSearchCache.js';
 import {
-  getOpenPullRequestsByAuthor,
-  getMergedPRsParticipatedByUser,
   getReposInProjectPublic,
   getUserDisplayName,
 } from '../../databaselayer/services/bitbucketService.js';
@@ -12,6 +11,8 @@ import {
   getCachedReposForUser,
   getCachedFilteredReposForUser,
 } from '../../databaselayer/cache/bitbucketCache.js';
+import { getCachedOpenPRsByAuthor } from '../../databaselayer/cache/openPrCache.js';
+import { getCachedReviewedPRsByUser } from '../../databaselayer/cache/reviewedPrCache.js';
 import { concurrentMap } from '../util/concurrentMap.js';
 import {
   computeCycleTimeHrs,
@@ -22,7 +23,7 @@ import { computeReviewDepth } from './reviewDepth.js';
 import { classifyWorkType } from './workType.js';
 import { computeCodeQuality, type PRQualityInput } from './codeQuality.js';
 import { computeSpecMetrics, aggregateSpecMetrics } from './specMetrics.js';
-import { getIssueChangelog } from '../../databaselayer/services/jiraService.js';
+import { getCachedIssueChangelog } from '../../databaselayer/cache/jiraChangelogCache.js';
 import type {
   AggregatedDeveloperMetric,
   DashboardQueryPayload,
@@ -165,6 +166,7 @@ async function aggregateForDeveloper(
   endDate: string,
   repos: RepoTarget[],
 ): Promise<AggregatedDeveloperMetric> {
+  resetFallbackEngaged();
   const { repoConcurrency, stalePrThresholdDays } = getConfig();
   const thresholdHrs = stalePrThresholdDays * 8;
   const nowMs = Date.now();
@@ -184,17 +186,17 @@ async function aggregateForDeveloper(
       repos,
       repoConcurrency,
       ({ projectKey, repoSlug }) =>
-        getOpenPullRequestsByAuthor(projectKey, repoSlug, devId)
+        getCachedOpenPRsByAuthor(projectKey, repoSlug, devId)
           .catch((): RawPullRequest[] => []),
     ),
-    // 3. Jira assignee issues
-    searchIssuesByAssignees([devId], startDate, endDate),
-    // 4. Merged PRs where dev was a reviewer (authored by others)
+    // 3. Jira assignee issues (delta monthly cache)
+    getCachedIssuesForDeveloper(devId, startDate, endDate),
+    // 4. Merged PRs where dev was a reviewer (delta cache)
     concurrentMap(
       repos,
       repoConcurrency,
       ({ projectKey, repoSlug }) =>
-        getMergedPRsParticipatedByUser(projectKey, repoSlug, devId, startDate)
+        getCachedReviewedPRsByUser(projectKey, repoSlug, devId, startDate)
           .catch((): RawPullRequest[] => []),
     ),
   ]);
@@ -209,11 +211,7 @@ async function aggregateForDeveloper(
   // ── 3. Commit-linked Jira issues — fetch now that we have keys ────────────────
   const commitLinkedIssues = await getIssuesByKeys([...jiraKeySet]);
 
-  const issueMap = new Map<string, RawJiraIssue>();
-  for (const issue of [...commitLinkedIssues, ...assigneeIssues]) {
-    issueMap.set(issue.key, issue);
-  }
-  const allIssues = [...issueMap.values()];
+  const allIssues = mergeIssuesByKey(commitLinkedIssues, assigneeIssues);
   const authoredPRs: RawPullRequest[] = prResults
     .flat()
     .filter((pr) => {
@@ -303,7 +301,7 @@ async function aggregateForDeveloper(
       allIssues,
       repoConcurrency,
       async (issue): Promise<SpecDrivenMetrics | null> => {
-        const withChangelog = await getIssueChangelog(issue.key);
+        const withChangelog = await getCachedIssueChangelog(issue.key);
         if (!withChangelog) return null;
         const msgs = commitMsgsByIssue.get(issue.key) ?? [];
         return computeSpecMetrics(withChangelog, msgs);

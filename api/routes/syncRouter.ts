@@ -4,12 +4,13 @@ import { getAllUsers } from '../../databaselayer/services/bitbucketService.js';
 import {
   getSyncStatus,
   triggerSyncForUsers,
+  triggerRefreshForUsers,
   cancelSync,
   rescheduleInterval,
   listRunLogs,
   purgeRunLogs,
   dateRange,
-  METRICS_CACHE_TTL_MS,
+  METRICS_SQLITE_TTL_MS,
 } from '../../jobs/metricsSync.js';
 import { getCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
 import { getConfig } from '../../backend/config/env.js';
@@ -181,17 +182,16 @@ syncRouter.get('/cache-coverage', async (_req: Request, res: Response, next: Nex
     }
 
     const { startDate, endDate } = dateRange();
-    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_CACHE_TTL_MS);
+    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_SQLITE_TTL_MS);
 
-    // Stale = has an entry but it was filtered out as too old. We detect this by
-    // checking which misses still have *any* row (beyond maxAgeMs threshold).
-    // For simplicity we use a very large TTL to find entries that exist but are stale.
-    const VERY_OLD = Date.now(); // any entry that exists will be ≤ now
-    const { hits: allHits } = await getCachedMetrics(configuredUserIds, startDate, endDate, VERY_OLD);
-    const freshIds = new Set(hits.map((h) => h.developerId));
-    const anyIds   = new Set(allHits.map((h) => h.developerId));
-    const staleUsers    = misses.filter((id) => anyIds.has(id));
-    const uncachedUsers = misses.filter((id) => !anyIds.has(id));
+    let staleUsers: string[] = [];
+    if (METRICS_SQLITE_TTL_MS > 0) {
+      const VERY_OLD = Date.now();
+      const { hits: allHits } = await getCachedMetrics(configuredUserIds, startDate, endDate, VERY_OLD);
+      const anyIds = new Set(allHits.map((h) => h.developerId));
+      staleUsers = misses.filter((id) => anyIds.has(id));
+    }
+    const uncachedUsers = misses.filter((id) => !staleUsers.includes(id));
 
     res.json({
       configuredUsers: configuredUserIds.length,
@@ -199,7 +199,52 @@ syncRouter.get('/cache-coverage', async (_req: Request, res: Response, next: Nex
       uncachedUsers,
       staleUsers,
     });
-    void freshIds; // used implicitly via the set construction above
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── POST /refresh ─────────────────────────────────────────────────────────────
+
+syncRouter.post('/refresh', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (getSyncStatus().running) {
+      res.status(409).json({ error: 'A sync is already running' });
+      return;
+    }
+
+    const body = req.body as { developerIds?: unknown; scope?: unknown };
+    const scopeRaw = typeof body.scope === 'string' ? body.scope : 'current-month';
+    if (scopeRaw !== 'current-month' && scopeRaw !== 'full') {
+      res.status(400).json({ error: 'scope must be current-month or full' });
+      return;
+    }
+    const scope = scopeRaw as 'current-month' | 'full';
+
+    let developerIds: string[] = [];
+    if (Array.isArray(body.developerIds) && body.developerIds.length > 0) {
+      const err = validateDeveloperIds(body.developerIds);
+      if (err) {
+        res.status(400).json({ error: err });
+        return;
+      }
+      developerIds = body.developerIds as string[];
+    } else {
+      try {
+        const file = await readJsonCache<{ developerIds: string[] }>(SYNC_CONFIG_PATH);
+        developerIds = file?.developerIds ?? [];
+      } catch {
+        // Unreadable config
+      }
+    }
+
+    if (developerIds.length === 0) {
+      res.status(400).json({ error: 'No users configured' });
+      return;
+    }
+
+    triggerRefreshForUsers(developerIds, scope);
+    res.status(202).json({ queued: developerIds.length, scope });
   } catch (e) {
     next(e);
   }
@@ -228,7 +273,7 @@ syncRouter.post('/warmup', async (_req: Request, res: Response, next: NextFuncti
     }
 
     const { startDate, endDate } = dateRange();
-    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_CACHE_TTL_MS);
+    const { hits, misses } = await getCachedMetrics(configuredUserIds, startDate, endDate, METRICS_SQLITE_TTL_MS);
 
     if (misses.length === 0) {
       res.status(200).json({ skipped: hits.length, queued: 0, queuedUsers: [] });

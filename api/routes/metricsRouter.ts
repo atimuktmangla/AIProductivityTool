@@ -6,10 +6,11 @@ import { generateInsightsSummary } from '../../AI/skills/insightsSummary.js';
 import { metricsRateLimiter } from '../guardrails/rateLimiter.js';
 import { sanitiseMetricsPayload } from '../guardrails/sanitiser.js';
 import { getConfig } from '../../backend/config/env.js';
-import { getCachedMetrics, setCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
+import { resolveMetricsFromCache } from '../../backend/metrics/cacheResolution.js';
+import { getCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
 import type { DashboardQueryPayload, MetricsResult } from '../../types/index.js';
 
-const METRICS_CACHE_TTL_MS = 60 * 60 * 1000; // serve pre-computed results for up to 1 hour
+import { METRICS_SQLITE_TTL_MS } from '../../backend/config/cacheTtl.js';
 
 export const metricsRouter = Router();
 
@@ -76,30 +77,47 @@ metricsRouter.post(
       // Supports partial hits: cached devs are returned immediately; uncached devs
       // are computed live and merged in. Skip when a compare period is requested.
       if (!payload.compareStartDate) {
-        const { hits, misses, oldestCachedAt } = await getCachedMetrics(
+        const cache = await getCachedMetrics(
           payload.developerIds,
           payload.startDate,
           payload.endDate,
-          METRICS_CACHE_TTL_MS,
+          METRICS_SQLITE_TTL_MS,
         );
-        if (misses.length === 0 && hits.length > 0) {
-          // Full cache hit — return without any live computation
-          const result: MetricsResult = { current: hits, cacheStatus: 'full', cachedAt: oldestCachedAt };
+        if (
+          cache.misses.length === 0 &&
+          cache.gapRefresh.length === 0 &&
+          cache.hits.length === payload.developerIds.length
+        ) {
+          const result: MetricsResult = {
+            current: cache.hits,
+            cacheStatus: 'full',
+            cachedAt: cache.oldestCachedAt,
+          };
           const { aiInsightsEnabled } = getConfig();
-          if (aiInsightsEnabled) result.insights = await generateInsightsSummary(hits);
+          if (aiInsightsEnabled) result.insights = await generateInsightsSummary(cache.hits);
           res.json(result);
           return;
         }
-        if (hits.length > 0 && misses.length > 0) {
-          // Partial hit — compute only the missing developers, then merge
-          const partial = await aggregateMetrics({ ...payload, developerIds: misses });
-          validateMetrics(partial.current);
-          // Cache the newly computed developers so subsequent requests are full hits
-          await setCachedMetrics(misses, payload.startDate, payload.endDate, partial.current);
-          const merged = [...hits, ...partial.current];
-          const result: MetricsResult = { current: merged, cacheStatus: 'partial', cachedAt: oldestCachedAt };
+
+        if (cache.hits.length > 0 || cache.gapRefresh.length > 0) {
+          const resolved = await resolveMetricsFromCache(
+            payload.developerIds,
+            payload.startDate,
+            payload.endDate,
+            METRICS_SQLITE_TTL_MS,
+            {
+              repoTargets:  payload.repoTargets,
+              projectKeys:  payload.projectKeys,
+            },
+          );
+          validateMetrics(resolved.metrics);
+          const result: MetricsResult = {
+            current: resolved.metrics,
+            cacheStatus: resolved.cacheStatus,
+            cachedAt: resolved.oldestCachedAt,
+          };
           const { aiInsightsEnabled } = getConfig();
-          if (aiInsightsEnabled) result.insights = await generateInsightsSummary(merged);
+          if (aiInsightsEnabled) result.insights = await generateInsightsSummary(resolved.metrics);
           res.json(result);
           return;
         }
@@ -107,14 +125,16 @@ metricsRouter.post(
 
       const result: MetricsResult = await aggregateMetrics(payload);
 
-      // Eval — sanity-check output; warnings are logged, never block the response
       validateMetrics(result.current);
 
-      // Populate SQLite cache with the live result so the next identical request
-      // is served instantly. Skip for compare-period requests (cache key is date-
-      // range only; compare data would be stale on a subsequent non-compare call).
       if (!payload.compareStartDate) {
-        await setCachedMetrics(payload.developerIds, payload.startDate, payload.endDate, result.current);
+        const { setCachedMetrics } = await import('../../databaselayer/cache/metricsCache.js');
+        await setCachedMetrics(
+          payload.developerIds,
+          payload.startDate,
+          payload.endDate,
+          result.current,
+        );
       }
 
       // Attach AI insights when enabled — failures fall back to rule-based silently

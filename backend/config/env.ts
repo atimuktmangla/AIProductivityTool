@@ -1,7 +1,7 @@
-import type { RepoTarget } from "../../types/index.js";
+import type { RepoTarget, IssueLinkingMode } from "../../types/index.js";
 import type { LlmProvider } from "../../AI/providers/llmProvider.js";
 
-export type { RepoTarget };
+export type { RepoTarget, IssueLinkingMode };
 
 export interface AppConfig {
   jiraBaseUrl: string;
@@ -49,9 +49,25 @@ export interface AppConfig {
   specDoneStatus: string;
   /** Jira status name (case-insensitive) that means blocked/awaiting clarification. */
   specBlockedStatus: string;
+  /** How Jira issues are discovered for work-type and code-quality metrics. */
+  issueLinkingMode: IssueLinkingMode;
+  /** File path for the persistent SQLite application store. */
+  appStorePath: string;
 }
 
 let cached: AppConfig | null = null;
+
+export function _resetConfigForTesting(): void {
+  cached = null;
+}
+
+export function parseIssueLinkingMode(raw: string): IssueLinkingMode {
+  const v = raw.trim().toLowerCase();
+  if (v === 'connector' || v === 'assignee' || v === 'hybrid') return v;
+  throw new Error(
+    `Invalid JIRA_ISSUE_LINKING_MODE "${raw}": expected connector, assignee, or hybrid`,
+  );
+}
 
 export function getConfig(): AppConfig {
   if (cached) return cached;
@@ -112,6 +128,8 @@ export function getConfig(): AppConfig {
     specVerificationStatus: process.env.SPEC_VERIFICATION_STATUS ?? "verification",
     specDoneStatus: process.env.SPEC_DONE_STATUS ?? "done",
     specBlockedStatus: process.env.SPEC_BLOCKED_STATUS ?? "blocked",
+    issueLinkingMode: parseIssueLinkingMode(process.env.JIRA_ISSUE_LINKING_MODE ?? "hybrid"),
+    appStorePath: process.env.APP_STORE_PATH ?? "data/cache/app-store.sqlite",
   };
 
   return cached;

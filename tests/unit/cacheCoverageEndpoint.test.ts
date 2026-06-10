@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 
 // Hoist mocks so vi.mocked() works on these after dynamic imports
 const readJsonCacheMock = vi.fn();
@@ -35,8 +35,8 @@ describe('GET /sync/cache-coverage (REQ-002-FR-005)', () => {
 
     // Re-init after resetModules so all dynamically imported modules share
     // the same freshly-initialised singleton instance.
-    const { initInMemoryDb: reinit } = await import('../../databaselayer/store/inMemoryDb.js');
-    reinit();
+    const { initAppStore: reinit } = await import('../../databaselayer/store/appStore.js');
+    reinit(':memory:');
 
     const { syncRouter } = await import('../../api/routes/syncRouter.js');
     app = express();

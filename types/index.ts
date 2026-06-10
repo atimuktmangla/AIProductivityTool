@@ -1,5 +1,13 @@
 // ─── Public API types ────────────────────────────────────────────────────────
 
+export type IssueLinkingMode = 'connector' | 'assignee' | 'hybrid';
+
+export interface IssueLinkingStatus {
+  mode:               IssueLinkingMode;
+  connectorAvailable: boolean;
+  fallbackEngaged:    boolean;
+}
+
 export interface RepoTarget {
   projectKey: string;
   repoSlug: string;
@@ -173,7 +181,7 @@ export interface MetricsResult {
   current:      AggregatedDeveloperMetric[];
   previous?:    AggregatedDeveloperMetric[];
   insights?:    TeamInsights;
-  cacheStatus?: 'full' | 'partial' | 'none';
+  cacheStatus?: 'full' | 'partial' | 'none' | 'gap-merged';
   cachedAt?:    number; // epoch ms of oldest cache entry used
 }
 

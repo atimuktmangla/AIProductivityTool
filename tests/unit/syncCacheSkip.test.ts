@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
 
 // ── Shared mocks ──────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ function makeMetric(developerId: string): AggregatedDeveloperMetric {
 describe('runSync cache-skip behaviour (REQ-002-FR-003, REQ-002-FR-004)', () => {
   beforeEach(() => {
     _resetForTesting();
-    initInMemoryDb();
+    initAppStore(':memory:');
     aggregateMetricsMock.mockReset();
   });
 

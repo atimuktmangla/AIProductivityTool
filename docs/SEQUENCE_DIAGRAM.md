@@ -101,33 +101,27 @@ sequenceDiagram
     note over BL_agg: Fan-out: Promise.all per developer
 
     par for each developer in developerIds
-        BL_agg->>DB_bb: getCommitsByAuthor(proj, repo, devId, start, end) [resolved repos]
-        loop paginate commits (early-exit on authorTimestamp < sinceMs)
-            DB_bb->>DB_http: atlassianGet()
-            DB_http->>BB: GET /rest/api/1.0/projects/{p}/repos/{r}/commits?author=X
-            BB-->>DB_http: BitbucketPagedResponse<RawCommit>
-            DB_http-->>DB_bb: RawCommit[]
-        end
-        DB_bb-->>BL_agg: RawCommit[] (date-filtered in-memory)
+        BL_agg->>DB_bb: getCachedMergedPRs + getCachedPRDetails [resolved repos]
+        DB_bb-->>BL_agg: PR bundles with commitCount per merged PR
+        BL_agg->>BL_agg: totalCommits = sum(commitCount)
 
-        BL_agg->>BL_agg: extract Jira keys via /([A-Z]+-\d+)/g
+        BL_agg->>BL_agg: extract Jira keys via /([A-Z]+-\d+)/g from PR titles
 
-        par fetch Jira issues (two paths)
-            BL_agg->>DB_jira: getIssuesByKeys(keys[])
+        par fetch Jira issues (hybrid linking)
+            BL_agg->>DB_jira: searchIssuesForDeveloper(devId, start, end)
+            note over DB_jira: connector JQL, assignee JQL, or hybrid fallback
+            DB_jira->>DB_http: atlassianPost()
+            DB_http->>JIRA: POST /rest/api/2/search {jql: ...}
+            JIRA-->>DB_http: JiraSearchResponse
+            DB_http-->>DB_jira: RawJiraIssue[]
+            DB_jira-->>BL_agg: RawJiraIssue[] (deduped by key)
+        and
+            BL_agg->>DB_jira: getIssuesByKeys(keys from PR titles)
             DB_jira->>DB_http: atlassianPost()
             DB_http->>JIRA: POST /rest/api/2/search {jql: "key in (...)"}
             JIRA-->>DB_http: JiraSearchResponse
             DB_http-->>DB_jira: RawJiraIssue[]
-            DB_jira-->>BL_agg: RawJiraIssue[] (commit-linked)
-        and
-            BL_agg->>DB_jira: searchIssuesByAssignees([devId], start, end)
-            loop paginate JQL search
-                DB_jira->>DB_http: atlassianPost()
-                DB_http->>JIRA: POST /rest/api/2/search {jql: "assignee in (...)"}
-                JIRA-->>DB_http: JiraSearchResponse
-                DB_http-->>DB_jira: RawJiraIssue[]
-            end
-            DB_jira-->>BL_agg: RawJiraIssue[] (assignee-based)
+            DB_jira-->>BL_agg: RawJiraIssue[] (PR-title-linked)
         end
 
         BL_agg->>BL_agg: deduplicate issues by issue.key (Map)

@@ -14,18 +14,23 @@ import { pingJira } from './databaselayer/services/jiraService.js';
 import { pingBitbucket } from './databaselayer/services/bitbucketService.js';
 import { evictOldCacheMonths } from './databaselayer/cache/cacheEviction.js';
 import { startMetricsSyncJob } from './jobs/metricsSync.js';
-import { initInMemoryDb } from './databaselayer/store/inMemoryDb.js';
+import { initAppStore } from './databaselayer/store/appStore.js';
+import { probeConnectorAvailability, getIssueLinkingStatus } from './databaselayer/services/jiraService.js';
 import { runMigrationCleanup } from './databaselayer/store/migrationCleanup.js';
 
 const config = getConfig();
 
 // Fail fast if the in-memory store cannot be initialised (REQ-4.12-1 / SC-007)
 try {
-  initInMemoryDb();
+  initAppStore();
 } catch (err) {
-  console.error('[store] failed to initialise in-memory database:', err instanceof Error ? err.message : String(err));
+  console.error('[store] failed to initialise application database:', err instanceof Error ? err.message : String(err));
   process.exit(1);
 }
+
+void probeConnectorAvailability().catch(() => {
+  console.warn('[jira] connector availability probe failed at startup');
+});
 
 const app = express();
 
@@ -52,7 +57,7 @@ app.get('/health', (_req, res) => {
 app.get('/ready', async (_req, res) => {
   try {
     await Promise.all([pingJira(), pingBitbucket()]);
-    res.json({ status: 'ready' });
+    res.json({ status: 'ready', jiraLinking: getIssueLinkingStatus() });
   } catch (err) {
     res.status(503).json({ status: 'not ready', detail: String(err) });
   }
@@ -76,7 +81,7 @@ startMetricsSyncJob().catch((err) => {
   console.warn('[sync] failed to start sync job:', err);
 });
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '127.0.0.1', () => {
   console.log(`AIProductivityTool listening on port ${config.port}`);
   console.log(`  GET  /health`);
   console.log(`  GET  /ready`);

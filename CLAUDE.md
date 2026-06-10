@@ -93,7 +93,7 @@ Not covered: generic tech tutorials, third-party docs, external APIs with no DSO
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/002-sync-cache-improvements/plan.md
+at specs/004-delta-cache-strategy/plan.md
 
 ## Project specs
 
@@ -102,6 +102,8 @@ at specs/002-sync-cache-improvements/plan.md
 - API contract (all endpoints): specs/000-project-baseline/api-contract.md
 - SQLite cache migration: specs/001-sqlite-cache-migration/
 - Sync cache improvements: specs/002-sync-cache-improvements/
+- Performance & resilience remediation: specs/003-performance-resilience/
+- Delta cache strategy: specs/004-delta-cache-strategy/
 <!-- SPECKIT END -->
 
 <!-- code-review-graph MCP tools -->

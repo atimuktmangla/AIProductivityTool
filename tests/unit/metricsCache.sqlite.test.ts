@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 import { getCachedMetrics, setCachedMetrics } from '../../databaselayer/cache/metricsCache.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
 
@@ -22,7 +22,7 @@ const END   = '2026-03-31';
 describe('metricsCache (SQLite)', () => {
   beforeEach(() => {
     _resetForTesting();
-    initInMemoryDb();
+    initAppStore(':memory:');
   });
 
   // @req REQ-4.12-2
@@ -51,12 +51,17 @@ describe('metricsCache (SQLite)', () => {
   });
 
   // @req REQ-4.12-2
-  it('getCachedMetrics returns miss for stale entry (maxAgeMs = -1 forces stale)', async () => {
+  it('getCachedMetrics returns miss for stale entry when maxAgeMs is positive', async () => {
     const metric = makeMetric('carol');
     await setCachedMetrics(['carol'], START, END, [metric]);
 
-    // maxAgeMs = -1: Date.now() - cached_at >= 0 > -1, so always stale
-    const { hits, misses } = await getCachedMetrics(['carol'], START, END, -1);
+    const db = (await import('../../databaselayer/store/appStore.js')).getDb();
+    db.prepare('UPDATE metrics_cache SET cached_at = ? WHERE developer_id = ?').run(
+      Date.now() - 86_400_000,
+      'carol',
+    );
+
+    const { hits, misses } = await getCachedMetrics(['carol'], START, END, 60_000);
     expect(hits).toHaveLength(0);
     expect(misses).toEqual(['carol']);
   });
@@ -107,7 +112,7 @@ describe('metricsCache (SQLite)', () => {
     expect(misses).toContain('heidi');
   });
 
-  // @req REQ-4.12-2
+  // @req REQ-4.12-2 REQ-003-FR-015
   it('no JSON files are written to data/cache/metrics-result/', async () => {
     const { existsSync } = await import('node:fs');
     await setCachedMetrics(['ivan'], START, END, [makeMetric('ivan')]);

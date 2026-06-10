@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 import express from 'express';
 import { metricsRouter } from '../../api/routes/metricsRouter.js';
 import { errorHandler } from '../../api/middleware/errorHandler.js';
 import { AtlassianHttpError } from '../../databaselayer/errors/AtlassianHttpError.js';
 import type { AggregatedDeveloperMetric } from '../../types/index.js';
+
+// ── Mock JSON file cache so delta envelopes do not bypass upstream mocks ─────
+vi.mock('../../databaselayer/cache/jsonFileCache.js', () => ({
+  readJsonCache:  vi.fn().mockResolvedValue(null),
+  writeJsonCache: vi.fn().mockResolvedValue(undefined),
+  removeCacheDir: vi.fn().mockResolvedValue(undefined),
+}));
 
 // ── Mock the HTTP client layer ────────────────────────────────────────────────
 vi.mock('../../databaselayer/client/atlassianFetch.js', () => ({
@@ -95,7 +102,7 @@ describe('POST /api/dashboard/metrics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     _resetForTesting();
-    initInMemoryDb();
+    initAppStore(':memory:');
   });
 
   // @req REQ-4.4.1-1 REQ-4.4.2-1 REQ-4.4.3-1

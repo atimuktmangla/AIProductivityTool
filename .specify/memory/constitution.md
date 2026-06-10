@@ -93,36 +93,36 @@ unrelated cleanup. Changes MUST be limited to what the task requires.
 increases cognitive load for the next person touching the code and makes diffs
 harder to review.
 
-### VI. In-Memory SQLite Storage Law (NON-NEGOTIABLE)
+### VI. SQLite Storage Law (NON-NEGOTIABLE)
 
-Transient metrics and operational caching MUST be stored in a single in-memory
-SQLite database instance (`:memory:`). Writing computed analytics or cache entries
-directly to the local JSON file system is **forbidden**.
+Transient metrics and operational caching MUST be stored in a single SQLite database
+instance. Writing computed analytics or cache entries directly to ad-hoc JSON file
+trees is **forbidden**.
 
 Specifically:
 - Per-developer metrics result cache MUST be held in SQLite, not in
   `data/cache/metrics-result/*.json` files.
 - Sync run logs MUST be stored in SQLite, not in `data/sync-logs/*.json` files.
-- The in-memory database is process-scoped and intentionally non-durable; it resets
-  on server restart. Background sync exists precisely to repopulate it.
+- The store MUST be a single file-backed SQLite database at `APP_STORE_PATH`
+  (default `data/cache/app-store.sqlite`) with WAL mode so metrics and sync logs
+  survive server restart within the configured freshness window.
 - Persistent operational **configuration** (e.g., `data/sync-config.json`) is exempt
   — it is not analytics and must survive restarts.
+- Tests MAY use `:memory:` via `initAppStore(':memory:')` without violating this law.
 
 Implementation constraint — keep dependencies minimal:
 - Prefer `node:sqlite` (built-in, Node.js ≥ 22.5, no `package.json` entry needed).
 - If the runtime Node version is below 22.5, use `better-sqlite3` (one package,
   synchronous API, zero transitive deps). No ORM, no query builder.
-- A single `databaselayer/store/inMemoryDb.ts` module MUST own the singleton connection and
+- A single `databaselayer/store/appStore.ts` module MUST own the singleton connection and
   schema initialisation. All other modules import from there — never open a second
   connection.
 
 **Rationale**: JSON file I/O introduces race conditions on concurrent writes (two
 sync batches writing the same developer file), requires atomic tmp-file rename
-gymnastics, scatters state across the filesystem making it hard to inspect or reset,
-and bleeds implementation details into CI environments. A single in-memory SQLite
-instance eliminates all of these: writes are serialised by SQLite's WAL, the full
-state is inspectable with one `SELECT`, and the process boundary is the only cleanup
-needed.
+gymnastics, and scatters state across the filesystem. A single SQLite file eliminates
+race conditions via WAL, keeps state inspectable with one `SELECT`, and survives
+restarts so background sync is not the only recovery path.
 
 ## Quality & Safety Standards
 
@@ -135,8 +135,8 @@ needed.
   Never `throw new Error('something broke')`.
 - **Leave-adjustment constant** (`33/261`) MUST NOT be duplicated. It lives in
   `backend/metrics/cycleTime.ts` and is imported wherever needed.
-- **Single SQLite connection.** The in-memory database singleton MUST be initialised
-  once at server startup in `databaselayer/store/inMemoryDb.ts`. PRs that open additional
+- **Single SQLite connection.** The database singleton MUST be initialised
+  once at server startup in `databaselayer/store/appStore.ts`. PRs that open additional
   connections or write JSON cache files MUST be rejected.
 
 ## Development Workflow
@@ -171,4 +171,4 @@ Compliance is verified by the traceability checker (automated) and by code revie
 (manual). Reviewers MUST reject PRs that violate Principles I–VI without a documented
 exception in the PR description.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-07 | **Last Amended**: 2026-06-07
+**Version**: 1.2.0 | **Ratified**: 2026-06-07 | **Last Amended**: 2026-06-10

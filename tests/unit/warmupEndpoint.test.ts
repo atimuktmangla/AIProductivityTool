@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
-import { _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { _resetForTesting } from '../../databaselayer/store/appStore.js';
 
 const readJsonCacheMock = vi.fn();
 
@@ -32,8 +32,8 @@ describe('POST /sync/warmup (REQ-002-FR-006)', () => {
     readJsonCacheMock.mockReset();
     vi.resetModules();
 
-    const { initInMemoryDb: reinit } = await import('../../databaselayer/store/inMemoryDb.js');
-    reinit();
+    const { initAppStore: reinit } = await import('../../databaselayer/store/appStore.js');
+    reinit(':memory:');
 
     const { syncRouter } = await import('../../api/routes/syncRouter.js');
     app = express();

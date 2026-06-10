@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { initInMemoryDb, _resetForTesting } from '../../databaselayer/store/inMemoryDb.js';
+import { initAppStore, _resetForTesting } from '../../databaselayer/store/appStore.js';
 
 vi.mock('../../backend/config/env.js', () => ({
   getConfig: () => ({
@@ -45,7 +45,7 @@ function makeRun(id: string, startOffset = 0): import('../../jobs/metricsSync.js
 describe('metricsSync run logs (SQLite)', () => {
   beforeEach(async () => {
     _resetForTesting();
-    initInMemoryDb();
+    initAppStore(':memory:');
     // Dynamic import so the module uses the freshly initialised store
     const mod = await import('../../jobs/metricsSync.js');
     writeRunLog        = mod.writeRunLog as typeof writeRunLog;
