@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "atlassian": {
+      "type": "http",
+      "url": "https://your-mcp-server/mcp-atlassian",
+      "headers": {
+        "X-Jira-Token": "${JIRA_PERSONAL_TOKEN}",
+        "X-Bitbucket-Token": "${BITBUCKET_PERSONAL_TOKEN}",
+        "X-Confluence-Token": "${CONFLUENCE_PERSONAL_TOKEN}"
+      }
+    }
+  }
+}

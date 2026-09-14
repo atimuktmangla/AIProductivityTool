@@ -1,0 +1,43 @@
+{
+  "name": "ai-productivity-tool",
+  "version": "1.0.0",
+  "description": "Developer metrics backend for on-prem Jira Server and Bitbucket Server",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run && tsx scripts/check-traceability.ts",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:trace": "tsx scripts/check-traceability.ts",
+    "test:ui": "cd frontend && npm test",
+    "test:e2e": "npx playwright test --config e2e/playwright.config.ts"
+  },
+  "dependencies": {
+    "axios": "^1.16.1",
+    "better-sqlite3": "^11.10.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/helmet": "^0.0.48",
+    "@types/node": "^20.14.0",
+    "@types/pino-http": "^5.8.4",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "supertest": "^7.2.2",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2",
+    "vitest": "^3.2.4"
+  }
+}
