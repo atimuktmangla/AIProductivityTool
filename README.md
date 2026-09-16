@@ -52,38 +52,48 @@ Internal engineering dashboard that pulls live data from on-premises **Jira Serv
 
 ```
 AIProductivityTool/
-├── server.ts               # Entry point — Express app, startup checks
+├── server.ts               # Entry point — Express app, startup checks, graceful shutdown
 ├── types/                  # Shared TypeScript interfaces (all layers)
-├── WEB/                    # HTTP layer — Express routes & middleware
+├── api/                    # HTTP layer — Express routes, middleware, hooks, guardrails
 │   ├── routes/
 │   │   ├── metricsRouter.ts  # users, projects, repos, metrics, insights
 │   │   └── syncRouter.ts     # sync status, trigger, config, logs
 │   ├── middleware/           # apiKeyAuth, errorHandler
-│   └── guardrails/           # rateLimiter, sanitiser
-├── BL/                     # Business logic — metric computation & config
-│   ├── config/env.ts       # Env validation & typed AppConfig
-│   ├── metrics/            # cycleTime, reviewDepth, workType, codeQuality, specMetrics, aggregator
-│   └── evals/              # metricsValidator — sanity checks on output
-├── DB/                     # Data access — Atlassian API clients & caching
-│   ├── client/             # Axios instance factory (SSL bypass for on-prem)
-│   ├── cache/
-│   │   ├── metricsCache.ts   # per-developer JSON file cache (one file per devId+dateRange)
-│   │   └── jsonFileCache.ts  # atomic read/write helpers (tmp file + rename)
-│   └── services/           # jiraService, bitbucketService
+│   ├── hooks/                # requestId, requestLogger
+│   └── guardrails/           # rateLimiter, sanitiser (input validation)
+├── backend/                # Business logic — config & metric computation
+│   ├── config/             # env.ts (typed AppConfig, fail-fast validation), logger.ts (pino)
+│   └── metrics/            # cycleTime, reviewDepth, workType, codeQuality, specMetrics, aggregator
+├── databaselayer/          # Data access — Atlassian API clients, caching, persistence
+│   ├── client/             # atlassianFetch.ts — bounded-concurrency axios (semaphore + retry + typed errors)
+│   ├── cache/              # metricsCache, jsonFileCache (atomic write), cacheEviction
+│   ├── services/           # jiraService, bitbucketService
+│   ├── store/              # appStore.ts — persistent SQLite (better-sqlite3), housekeeping
+│   └── errors/             # AtlassianHttpError — typed HTTP/network error mapping
 ├── AI/                     # AI features
-│   └── skills/             # insightsSummary — team insights narrative
+│   ├── providers/          # llmProvider — Anthropic / OpenAI / Gemini abstraction
+│   ├── skills/             # insightsSummary — deterministic baseline + optional LLM narrative
+│   └── subagents/          # retryAgent — HTTP retry/backoff helper
 ├── jobs/
 │   └── metricsSync.ts      # Background sync job — reads data/sync-config.json, writes run logs
 ├── data/                   # Runtime data (git-ignored)
 │   ├── sync-config.json    # Persisted sync schedule (written by POST /sync/config)
 │   ├── sync-logs/          # One JSON file per sync run
-│   └── cache/metrics-result/  # Per-developer cache files
-└── UI/                     # React + TypeScript + Vite + Recharts
-    └── src/
-        ├── components/     # Dashboard, SyncPage, FilterPanel, charts, table
-        ├── hooks/          # useDashboard, useSync — typed useReducer state
-        └── types/          # Shared API types
+│   └── cache/              # Per-developer JSON cache + app-store.sqlite
+├── frontend/               # React + TypeScript + Vite + Recharts
+│   └── src/
+│       ├── components/     # Dashboard, SyncPage, FilterPanel, charts, table
+│       ├── hooks/          # useDashboard, useSync — typed useReducer state
+│       └── types/          # Shared API types
+├── tests/                  # unit/ (28 suites) + integration/ (4 suites) — vitest
+├── e2e/                    # Playwright end-to-end tests
+└── docs/                   # Functional spec, detailed design, sequence + architecture diagrams, ADRs
 ```
+
+> **Layer note:** `api/` is the HTTP boundary, `backend/` holds business logic
+> and config, `databaselayer/` isolates all external I/O (Atlassian APIs + local
+> cache/SQLite), and `AI/` contains the optional insight-generation layer. This
+> keeps the metric algorithms free of transport and I/O concerns.
 
 ---
 
@@ -128,10 +138,10 @@ Use this when:
 
 ```bash
 cp .env.example .env
-cp UI/.env.example UI/.env
+cp frontend/.env.example frontend/.env
 ```
 
-Edit `.env` and `UI/.env` — see [Configuration](#configuration) below.
+Edit `.env` and `frontend/.env` — see [Configuration](#configuration) below.
 
 ### 2. Start (one command)
 
@@ -151,7 +161,7 @@ npm install
 npm run dev
 
 # Frontend (port 5173) — in a second terminal
-cd UI
+cd frontend
 npm install
 npm run dev
 ```
@@ -165,7 +175,7 @@ The Vite dev server proxies `/api/*` to `:3000` automatically.
 npm run build        # outputs to dist/
 
 # Frontend
-cd UI && npm run build   # outputs to frontend/dist/
+cd frontend && npm run build   # outputs to frontend/dist/
 ```
 
 ---
@@ -217,7 +227,7 @@ The `api` service uses the `.env` file in the repo root. The `ui` service talks 
 
 **PAT setup:** Jira — **Profile → Personal Access Tokens**. Bitbucket — **Account → Personal Access Tokens**.
 
-### Frontend `UI/.env`
+### Frontend `frontend/.env`
 
 | Variable       | Required | Description                                |
 | -------------- | -------- | ------------------------------------------ |
@@ -394,7 +404,12 @@ Purges all sync run log files. Returns `204 No Content`.
 
 ---
 
-## Performance benchmarks
+## Performance targets (threshold bands)
+
+These are the **health-rating thresholds** the dashboard uses to colour-code
+each metric — not measured benchmarks. A team's actual numbers are computed live
+from Jira and Bitbucket and compared against these bands to produce the
+on-track / needs-attention / at-risk rating. Adjust them to your team's norms.
 
 | Stage            | On track | Needs attention | At risk  |
 | ---------------- | -------- | --------------- | -------- |
@@ -418,7 +433,7 @@ npm run test:coverage     # coverage report
 
 ```bash
 npx tsc --noEmit          # backend
-cd UI && npx tsc --noEmit # frontend
+cd frontend && npx tsc --noEmit # frontend
 ```
 
 Both must pass with zero errors before opening a PR.
@@ -442,7 +457,7 @@ Both must pass with zero errors before opening a PR.
 ## Contributing
 
 1. Branch from `main`
-2. Run `npx tsc --noEmit` in both root and `UI/` — zero errors required
-3. Run `npm run build` (root) and `cd UI && npm run build` — both must pass
+2. Run `npx tsc --noEmit` in both root and `frontend/` — zero errors required
+3. Run `npm run build` (root) and `cd frontend && npm run build` — both must pass
 4. Open a PR targeting `main`
 "# AIProductivityTool" 
