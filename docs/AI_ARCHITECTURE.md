@@ -122,10 +122,9 @@ return { ...base, aiGenerated: false };
   deterministic rule-based summary with `aiGenerated: false`. The user still
   gets a complete, correct report.
 - Transient failures on the **data-fetch** side (Jira/Bitbucket 5xx, 429,
-  network blips) are handled separately by `AI/subagents/retryAgent.ts`
+  network blips) are handled separately by `databaselayer/http/retry.ts`
   (`withRetry`) — exponential backoff, capped attempts, retry only on transient
-  error classes. (Note: this is a retry helper, not an autonomous agent; see
-  §7.)
+  error classes. It is a retry helper, not an autonomous agent.
 
 ---
 
@@ -173,9 +172,11 @@ approval step before any external side effect.
 
 ---
 
-## 9. Honest naming note
+## 9. Naming note
 
-The retry helper lives at `AI/subagents/retryAgent.ts` and is referred to as a
-"retry subagent" in its own comments. It is, precisely, an exponential-backoff
-retry wrapper — not an autonomous agent that plans or calls tools. This document
-describes it as what it is. See ADR-0006 for the decision to rename it.
+An earlier version placed the retry helper at `AI/subagents/retryAgent.ts` and
+called it a "retry subagent". It was neither AI-related nor an agent — just an
+exponential-backoff retry wrapper — so it now lives at
+`databaselayer/http/retry.ts` alongside the HTTP client it serves. The
+`agent`/`subagent` vocabulary is reserved for genuinely agentic components, of
+which this project has none by design (see §1 and ADR-0006).

@@ -65,6 +65,8 @@ AIProductivityTool/
 ├── DB/                         # Data access layer
 │   ├── client/
 │   │   └── atlassianFetch.ts   # Axios instance factory + error mapping
+│   ├── http/
+│   │   └── retry.ts            # Exponential-backoff retry helper (withRetry)
 │   ├── errors/
 │   │   └── AtlassianHttpError.ts
 │   ├── cache/
@@ -79,8 +81,6 @@ AIProductivityTool/
 ├── AI/                         # AI features
 │   ├── providers/
 │   │   └── llmProvider.ts      # LLM provider type + factory (anthropic | openai | gemini)
-│   ├── subagents/
-│   │   └── retryAgent.ts       # Retry wrapper for flaky LLM calls
 │   └── skills/
 │       └── insightsSummary.ts  # Team insights narrative (rule-based + optional AI)
 ├── jobs/

@@ -1,6 +1,6 @@
 # ADR-0006: Name the retry helper honestly (not an "agent")
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
@@ -11,13 +11,14 @@ wrapper for transient Atlassian API failures. Its path and comments call it a
 calls tools. This helper does neither; it is a control-flow utility. Mislabeling
 it risks looking like résumé-driven naming to an AI-literate reviewer.
 
-## Decision (proposed)
+## Decision
 
-Rename the module and symbol to reflect what it is — e.g.
-`databaselayer/http/retry.ts` exporting `withRetry` — and reserve the
-`agent`/`subagent` vocabulary for genuinely agentic components (of which this
-project currently has none; its AI usage is a single bounded narration call, by
-design — see ADR-0001).
+Moved the module from `AI/subagents/retryAgent.ts` to
+`databaselayer/http/retry.ts` (keeping the honest `withRetry` export name),
+placing it next to the HTTP client it serves. Reserved the `agent`/`subagent`
+vocabulary for genuinely agentic components — of which this project currently
+has none; its AI usage is a single bounded narration call, by design (see
+ADR-0001).
 
 ## Alternatives considered
 
@@ -35,5 +36,7 @@ design — see ADR-0001).
 
 ## Consequences
 
-- Tracked as a P2 follow-up. Until executed, `docs/AI_ARCHITECTURE.md` §9 and
-  this ADR document the discrepancy openly.
+- Import in `databaselayer/client/atlassianFetch.ts` and the dynamic imports in
+  `tests/unit/remainingRequirements.test.ts` updated to the new path.
+- `AI/subagents/` removed; `AI/` now contains only `providers/` and `skills/`.
+- `docs/AI_ARCHITECTURE.md` §9, README, and DETAILED_DESIGN updated to match.

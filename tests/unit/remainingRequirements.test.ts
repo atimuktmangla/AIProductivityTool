@@ -164,7 +164,7 @@ describe('repo targeting — UI overrides env (REQ-4.3-1)', () => {
 describe('429 retry with exponential backoff (REQ-4.7-5, REQ-4.10-2)', () => {
   // @req REQ-4.7-5 REQ-4.10-2
   it('withRetry retries a 429 error and succeeds on the second attempt', async () => {
-    const { withRetry } = await import('../../AI/subagents/retryAgent.js');
+    const { withRetry } = await import('../../databaselayer/http/retry.js');
 
     let calls = 0;
     const err429 = Object.assign(new Error('rate limited'), { status: 429 });
@@ -184,7 +184,7 @@ describe('429 retry with exponential backoff (REQ-4.7-5, REQ-4.10-2)', () => {
 
   // @req REQ-4.7-5 REQ-4.10-2
   it('withRetry re-throws after all attempts exhausted on 429', async () => {
-    const { withRetry } = await import('../../AI/subagents/retryAgent.js');
+    const { withRetry } = await import('../../databaselayer/http/retry.js');
 
     const err429 = Object.assign(new Error('rate limited'), { status: 429 });
     let calls = 0;

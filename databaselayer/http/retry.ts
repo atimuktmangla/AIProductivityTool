@@ -1,5 +1,5 @@
-// Retry subagent: wraps any async operation with exponential backoff.
-// Used by DB services to handle transient Atlassian API failures (502, 503, network blips).
+// HTTP retry helper: wraps any async operation with exponential backoff.
+// Used by the Atlassian HTTP client to handle transient API failures (502, 503, 429, network blips).
 
 export interface RetryOptions {
   maxAttempts?: number;   // default 3
@@ -33,7 +33,7 @@ export async function withRetry<T>(
       }
       const delay = Math.min(opts.baseDelayMs * 2 ** (attempt - 1), opts.maxDelayMs);
       console.warn(
-        `[retryAgent] attempt ${attempt} failed — retrying in ${delay}ms`,
+        `[retry] attempt ${attempt} failed — retrying in ${delay}ms`,
         err instanceof Error ? err.message : err,
       );
       await sleep(delay);

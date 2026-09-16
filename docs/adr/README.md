@@ -11,4 +11,4 @@ ADR that supersedes the old one.
 | [0003](0003-bounded-concurrency-semaphore.md) | Global semaphore for on-prem API fan-out | Accepted |
 | [0004](0004-api-key-auth.md) | Shared-secret API key auth for an internal single-tenant tool | Accepted |
 | [0005](0005-tls-self-signed-opt-in.md) | TLS verification on by default, self-signed opt-in | Accepted |
-| [0006](0006-rename-retry-agent.md) | Name the retry helper honestly (not an "agent") | Proposed |
+| [0006](0006-rename-retry-agent.md) | Name the retry helper honestly (not an "agent") | Accepted |

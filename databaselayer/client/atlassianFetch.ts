@@ -3,7 +3,7 @@ import type { AxiosInstance, AxiosError } from 'axios';
 import https from 'node:https';
 import { getConfig } from '../../backend/config/env.js';
 import { AtlassianHttpError } from '../errors/AtlassianHttpError.js';
-import { withRetry } from '../../AI/subagents/retryAgent.js';
+import { withRetry } from '../http/retry.js';
 
 // TLS verification is ON by default. Many on-prem Atlassian servers use
 // self-signed or internal-CA certificates; set ALLOW_SELF_SIGNED_CERTS=true to

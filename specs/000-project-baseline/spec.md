@@ -107,7 +107,7 @@ All I/O with external systems and local storage. Responsibilities:
 ### 4.5 `AI/` — AI features
 
 - `providers/llmProvider.ts` — unified `callLlm(provider, key, prompt)` supporting Anthropic, OpenAI, and Gemini
-- `subagents/retryAgent.ts` — retry wrapper for flaky LLM calls
+- `databaselayer/http/retry.ts` — exponential-backoff retry helper (`withRetry`) for transient Atlassian API failures
 - `skills/insightsSummary.ts` — rule-based team insights + optional LLM narrative overlay
 
 ### 4.6 `jobs/` — Background sync

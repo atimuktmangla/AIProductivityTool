@@ -50,6 +50,11 @@ Internal engineering dashboard that pulls live data from on-premises **Jira Serv
 
 ## Architecture
 
+![System architecture](docs/architecture.png)
+
+<details>
+<summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TB
     User["Engineering Manager / Developer"]
@@ -75,8 +80,10 @@ flowchart TB
     AI -.->|"only if AI_INSIGHTS_ENABLED — numeric aggregates only"| LLM
 ```
 
-> Source: [`docs/architecture.mmd`](docs/architecture.mmd). Render a PNG with
-> `npx @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.png`.
+</details>
+
+> Diagram source: [`docs/architecture.mmd`](docs/architecture.mmd). Regenerate the
+> PNG with `npx @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.png`.
 > See [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) for the AI design and
 > data-egress boundary.
 
@@ -98,14 +105,14 @@ AIProductivityTool/
 │   └── metrics/            # cycleTime, reviewDepth, workType, codeQuality, specMetrics, aggregator
 ├── databaselayer/          # Data access — Atlassian API clients, caching, persistence
 │   ├── client/             # atlassianFetch.ts — bounded-concurrency axios (semaphore + retry + typed errors)
+│   ├── http/               # retry.ts — exponential-backoff retry helper (withRetry)
 │   ├── cache/              # metricsCache, jsonFileCache (atomic write), cacheEviction
 │   ├── services/           # jiraService, bitbucketService
 │   ├── store/              # appStore.ts — persistent SQLite (better-sqlite3), housekeeping
 │   └── errors/             # AtlassianHttpError — typed HTTP/network error mapping
 ├── AI/                     # AI features
 │   ├── providers/          # llmProvider — Anthropic / OpenAI / Gemini abstraction
-│   ├── skills/             # insightsSummary — deterministic baseline + optional LLM narrative
-│   └── subagents/          # retryAgent — HTTP retry/backoff helper
+│   └── skills/             # insightsSummary — deterministic baseline + optional LLM narrative
 ├── jobs/
 │   └── metricsSync.ts      # Background sync job — reads data/sync-config.json, writes run logs
 ├── data/                   # Runtime data (git-ignored)
