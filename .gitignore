@@ -75,6 +75,9 @@ __pycache__/
 .kiro/settings/mcp.json
 .kiro/steering/engineering.md
 
-# Security-audit reports (internal findings — do not publish)
+# Security-audit reports (internal findings ï¿½ do not publish)
 PUBLIC_REPOSITORY_SECURITY_AUDIT.md
 PUBLIC_REPOSITORY_REMEDIATION_PLAN.md
+
+# Kiro session working specs (internal planning notes â€” never publish)
+.kiro/specs/quality-uplift/
