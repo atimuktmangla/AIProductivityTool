@@ -34,3 +34,57 @@ Older versions are not guaranteed to receive patches.
 Never commit secrets (tokens, API keys, passwords, connection strings) to this
 repository. Use the `.env` file (git-ignored) for local configuration and refer
 to `.env.example` for the required variables.
+
+Credentials handled by this app:
+
+- **Jira / Bitbucket Personal Access Tokens** — read from `JIRA_TOKEN` /
+  `BITBUCKET_TOKEN`, sent as `Authorization: Bearer` headers to your on-prem
+  servers only. Never logged.
+- **`API_KEY`** — a shared secret every `/api` request must send in the
+  `X-Api-Key` header. This is the app's only authentication mechanism (see
+  Authentication below).
+- **`AI_API_KEY`** — optional LLM provider key, used only when
+  `AI_INSIGHTS_ENABLED=true`.
+
+## Authentication model
+
+The API is protected by a single shared secret (`API_KEY`) enforced on all
+`/api` routes, plus a CORS allowlist (`ALLOWED_ORIGIN`), Helmet security
+headers, a request rate limiter, and a 64 KB JSON body cap. The server binds to
+`127.0.0.1` by default. This model is appropriate for an internal,
+single-tenant, on-prem deployment. It is **not** multi-user auth — there is no
+per-user identity, RBAC, or session management, and that is a deliberate scope
+decision (see `docs/adr/`). Do not expose this service directly to the public
+internet without adding a proper auth layer in front of it.
+
+## TLS certificate verification (self-signed on-prem certs)
+
+TLS certificate verification is **ON by default**. On-prem Jira and Bitbucket
+Server instances frequently use self-signed or internal-CA certificates that
+Node will reject. To tolerate them, set:
+
+```
+ALLOW_SELF_SIGNED_CERTS=true
+```
+
+When enabled, certificate validation is disabled **for outbound Jira/Bitbucket
+calls only** (via a dedicated HTTPS agent in
+`databaselayer/client/atlassianFetch.ts`). The app logs a warning at startup so
+this is never silent.
+
+**Risk:** disabling verification means a man-in-the-middle on the network path
+to your Atlassian servers would not be detected. Only enable this on a trusted
+internal network. The secure alternative is to add your internal CA to Node's
+trust store (`NODE_EXTRA_CA_CERTS=/path/to/ca.pem`) and leave
+`ALLOW_SELF_SIGNED_CERTS=false`.
+
+## Data sent to third-party LLMs
+
+When `AI_INSIGHTS_ENABLED=true`, the insights feature sends a prompt to the
+configured provider (Anthropic / OpenAI / Gemini). The prompt contains
+**aggregated, numeric team metrics** (per-developer commit counts, cycle-time
+hours, work-type totals, spec-adherence scores) and developer display names — it
+does **not** send source code, commit diffs, Jira ticket bodies, or credentials.
+The feature is **off by default**; with it off, a local rule-based summary is
+used and nothing leaves your network. See `docs/AI_ARCHITECTURE.md` for the full
+data-flow boundary.

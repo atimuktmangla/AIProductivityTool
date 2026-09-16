@@ -53,6 +53,12 @@ export interface AppConfig {
   issueLinkingMode: IssueLinkingMode;
   /** File path for the persistent SQLite application store. */
   appStorePath: string;
+  /**
+   * When true, TLS certificate verification is disabled for Jira/Bitbucket
+   * calls (tolerates self-signed / internal-CA certs on on-prem servers).
+   * Defaults to false (secure). Use only on a trusted internal network.
+   */
+  allowSelfSignedCerts: boolean;
 }
 
 let cached: AppConfig | null = null;
@@ -126,6 +132,7 @@ export function getConfig(): AppConfig {
     specBlockedStatus: process.env.SPEC_BLOCKED_STATUS ?? "blocked",
     issueLinkingMode: parseIssueLinkingMode(process.env.JIRA_ISSUE_LINKING_MODE ?? "hybrid"),
     appStorePath: process.env.APP_STORE_PATH ?? "data/cache/app-store.sqlite",
+    allowSelfSignedCerts: process.env.ALLOW_SELF_SIGNED_CERTS === "true",
   };
 
   return cached;

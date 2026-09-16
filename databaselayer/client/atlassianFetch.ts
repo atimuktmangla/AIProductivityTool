@@ -5,19 +5,33 @@ import { getConfig } from '../../backend/config/env.js';
 import { AtlassianHttpError } from '../errors/AtlassianHttpError.js';
 import { withRetry } from '../../AI/subagents/retryAgent.js';
 
-// Tolerates self-signed certificates common on on-prem Atlassian servers.
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false,
-  keepAlive: true,
-  maxSockets: 32,       // per-host socket pool — prevents OS-level connection exhaustion
-  maxFreeSockets: 16,
-});
+// TLS verification is ON by default. Many on-prem Atlassian servers use
+// self-signed or internal-CA certificates; set ALLOW_SELF_SIGNED_CERTS=true to
+// tolerate them. This disables certificate validation for Atlassian calls only,
+// so use it solely on a trusted internal network. See SECURITY.md.
+let _httpsAgent: https.Agent | null = null;
+function getHttpsAgent(): https.Agent {
+  if (_httpsAgent) return _httpsAgent;
+  const { allowSelfSignedCerts } = getConfig();
+  if (allowSelfSignedCerts) {
+    console.warn(
+      '[tls] ALLOW_SELF_SIGNED_CERTS=true — certificate verification is DISABLED for Jira/Bitbucket calls. Use only on a trusted internal network.',
+    );
+  }
+  _httpsAgent = new https.Agent({
+    rejectUnauthorized: !allowSelfSignedCerts,
+    keepAlive: true,
+    maxSockets: 32,       // per-host socket pool — prevents OS-level connection exhaustion
+    maxFreeSockets: 16,
+  });
+  return _httpsAgent;
+}
 
 function createInstance(baseUrl: string, token: string): AxiosInstance {
   const { httpTimeoutMs } = getConfig();
   return axios.create({
     baseURL:    baseUrl,
-    httpsAgent,
+    httpsAgent: getHttpsAgent(),
     headers: {
       Authorization:  `Bearer ${token}`,
       Accept:         'application/json',

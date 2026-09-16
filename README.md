@@ -206,6 +206,7 @@ The `api` service uses the `.env` file in the repo root. The `ui` service talks 
 | `BITBUCKET_BASE_URL`      | Yes      | —                         | Base URL of your Bitbucket Server (Stash)                                |
 | `BITBUCKET_TOKEN`         | Yes      | —                         | Bitbucket Personal Access Token                                          |
 | `API_KEY`                 | Yes      | —                         | Shared secret — all `/api` requests must send this in `X-Api-Key` header |
+| `ALLOW_SELF_SIGNED_CERTS` | No       | `false`                   | Set `true` to accept self-signed / internal-CA certs on on-prem Jira/Bitbucket. Disables TLS verification for those calls — use only on a trusted internal network. See [SECURITY.md](SECURITY.md). |
 | `ALLOWED_ORIGIN`          | No       | `http://localhost:5173`   | CORS origin for the UI                                                   |
 | `BITBUCKET_PROJECT_KEYS`  | No       | —                         | Comma-separated project keys for Tier 2 discovery (e.g. `DOSC,PLATFORM`) |
 | `BITBUCKET_PROJECTS`      | No       | —                         | Comma-separated `PROJECT/repo-slug` pairs to pin exact repos (Tier 1)    |
