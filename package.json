@@ -24,7 +24,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
     "pino": "^9.6.0",
-    "pino-http": "^10.4.0"
+    "pino-http": "^11.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
