@@ -23,13 +23,13 @@ if not exist "frontend\node_modules" (
 )
 
 echo [start] Backend  -> http://localhost:3000
-start "AIProductivityTool API" cmd /k "npm run dev"
+start "AIProductivityTool API" /d "%~dp0" cmd /k npm run dev
 
 echo [start] Frontend -> http://localhost:5173
-start "AIProductivityTool UI" cmd /k "cd frontend && npm run dev"
+start "AIProductivityTool UI" /d "%~dp0frontend" cmd /k npm run dev
 
 timeout /t 4 >nul
-start "" http://localhost:5173
+start "" "http://localhost:5173"
 echo [ok] Launched. Close the two terminal windows to stop.
 goto :eof
 
