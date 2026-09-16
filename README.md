@@ -50,6 +50,38 @@ Internal engineering dashboard that pulls live data from on-premises **Jira Serv
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    User["Engineering Manager / Developer"]
+    UI["React + Vite SPA (frontend/)"]
+    API["HTTP layer (api/)<br/>apiKeyAuth · rateLimiter · sanitiser · helmet · CORS"]
+    BL["Metric engine (backend/metrics/)<br/>deterministic · unit-tested"]
+    AI["AI insights (AI/skills/)<br/>rule-based baseline + optional LLM narrative"]
+    Job["Background sync job (jobs/)"]
+    HTTP["atlassianFetch (databaselayer/client/)<br/>bounded-concurrency + retry + typed errors"]
+    Cache["JSON cache + SQLite app-store"]
+    Jira["Jira Server / DC (on-prem)"]
+    BB["Bitbucket Server / DC (on-prem)"]
+    LLM["LLM provider — optional<br/>Anthropic / OpenAI / Gemini"]
+
+    User --> UI -->|"/api/* + X-Api-Key"| API --> BL
+    BL --> AI
+    Job --> BL
+    BL --> HTTP
+    BL <--> Cache
+    Job <--> Cache
+    HTTP -->|Bearer PAT| Jira
+    HTTP -->|Bearer PAT| BB
+    AI -.->|"only if AI_INSIGHTS_ENABLED — numeric aggregates only"| LLM
+```
+
+> Source: [`docs/architecture.mmd`](docs/architecture.mmd). Render a PNG with
+> `npx @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.png`.
+> See [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md) for the AI design and
+> data-egress boundary.
+
+### Directory layout
+
 ```
 AIProductivityTool/
 ├── server.ts               # Entry point — Express app, startup checks, graceful shutdown

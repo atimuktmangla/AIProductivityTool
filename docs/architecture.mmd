@@ -1,0 +1,45 @@
+%% AIProductivityTool — system architecture
+%% Render: `npx @mermaid-js/mermaid-cli -i docs/architecture.mmd -o docs/architecture.png`
+%% GitHub also renders this natively in a ```mermaid fenced block.
+flowchart TB
+    subgraph client["Client"]
+        User["Engineering Manager / Developer"]
+        UI["React + Vite SPA<br/>frontend/<br/>Recharts dashboard, Sync Jobs UI"]
+    end
+
+    subgraph server["Node / Express backend"]
+        direction TB
+        API["HTTP layer — api/<br/>routes · middleware · hooks · guardrails"]
+        Auth["apiKeyAuth · rateLimiter · sanitiser<br/>helmet · CORS allowlist · 64KB body cap"]
+        BL["Business logic — backend/metrics/<br/>cycleTime · reviewDepth · workType<br/>codeQuality · specMetrics · aggregator<br/>(pure, deterministic, unit-tested)"]
+        AI["AI insights — AI/skills/<br/>rule-based baseline (always)<br/>+ optional LLM narrative"]
+        Job["Background sync job — jobs/<br/>scheduled parallel batch prewarm"]
+    end
+
+    subgraph data["Data access — databaselayer/"]
+        direction TB
+        HTTP["atlassianFetch<br/>bounded-concurrency semaphore<br/>+ retry + typed errors"]
+        Cache["JSON file cache<br/>+ SQLite app-store<br/>(better-sqlite3)"]
+    end
+
+    subgraph external["External systems"]
+        direction TB
+        Jira["Jira Server / DC<br/>(on-prem)"]
+        BB["Bitbucket Server / DC<br/>(on-prem)"]
+        LLM["LLM provider (optional)<br/>Anthropic / OpenAI / Gemini"]
+    end
+
+    User --> UI
+    UI -->|"/api/* + X-Api-Key"| API
+    API --> Auth --> BL
+    BL --> AI
+    Job --> BL
+    BL --> HTTP
+    BL <--> Cache
+    Job <--> Cache
+    HTTP -->|"Bearer PAT"| Jira
+    HTTP -->|"Bearer PAT"| BB
+    AI -.->|"only if AI_INSIGHTS_ENABLED<br/>numeric aggregates only"| LLM
+
+    classDef opt stroke-dasharray: 5 5;
+    class LLM opt;
