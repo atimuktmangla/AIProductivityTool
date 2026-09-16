@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import type { SyncStatus } from '../../types/index.js';
 
 // Stub fetch globally
 beforeEach(() => {
@@ -16,7 +17,7 @@ vi.stubGlobal('import', { meta: { env: { VITE_API_KEY: 'test-key' } } });
 const mockState = {
   status: { running: false, lastRunAt: null, nextRunAt: null, runStartedAt: null,
     activeUsers: [], completedUsers: [], failedUsers: [], totalSyncUsers: 0,
-    configuredUsers: ['alice'], intervalMinutes: 0, scheduledTime: '' },
+    configuredUsers: ['alice'], intervalMinutes: 0, scheduledTime: '' } as SyncStatus,
   logs: [],
   coverage: { configuredUsers: 1, cachedUsers: 1, uncachedUsers: [], staleUsers: [] },
   mode: 'manual' as const,
