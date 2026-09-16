@@ -477,6 +477,10 @@ Both must pass with zero errors before opening a PR.
 
 | Document                                                                 | Description                                                    |
 | ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| [PROJECT_STORY.md](PROJECT_STORY.md)                                     | Problem, solution, AI role, engineering & leadership value     |
+| [docs/AI_ARCHITECTURE.md](docs/AI_ARCHITECTURE.md)                       | AI design, data-egress boundary, hallucination/injection posture |
+| [docs/adr/](docs/adr/)                                                   | Architecture Decision Records (the "why" behind key choices)   |
+| [SECURITY.md](SECURITY.md)                                               | Auth model, TLS bypass, secret handling, disclosure            |
 | [docs/FUNCTIONAL_SPEC.md](docs/FUNCTIONAL_SPEC.md)                       | Product requirements, data flow, known limitations             |
 | [docs/DETAILED_DESIGN.md](docs/DETAILED_DESIGN.md)                       | Component design, algorithm details, extension guide           |
 | [docs/SEQUENCE_DIAGRAM.md](docs/SEQUENCE_DIAGRAM.md)                     | Mermaid sequence diagrams for all major flows                  |
