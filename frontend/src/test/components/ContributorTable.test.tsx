@@ -34,7 +34,7 @@ describe('ContributorTable', () => {
     expect(screen.getByText('Bob Jones')).toBeInTheDocument();
   });
 
-  // @req REQ-4.5-1
+  // @req REQ-4.6-1
   it('shows skeleton rows when loading', () => {
     const { container } = render(<ContributorTable data={[]} isLoading={true} onSelect={vi.fn()} />);
     const skeletons = container.querySelectorAll('.skeleton');
@@ -70,7 +70,7 @@ describe('ContributorTable', () => {
     expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument();
   });
 
-  // @req REQ-4.6-4
+  // @req REQ-4.5-6
   it('shows flag icon for large average PR size (>400 lines)', () => {
     const data = [makeDev({ avgPrSizeLines: 500 })];
     const { container } = render(<ContributorTable data={data} isLoading={false} onSelect={vi.fn()} />);

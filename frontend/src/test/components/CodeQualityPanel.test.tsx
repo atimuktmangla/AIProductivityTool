@@ -41,20 +41,20 @@ describe('CodeQualityPanel', () => {
     expect(container.querySelector('.code-quality-panel')).toBeNull();
   });
 
-  // @req REQ-4.6-2
+  // @req REQ-4.4.9-1
   it('renders team average score gauge', () => {
     render(<CodeQualityPanel data={[makeDev()]} isLoading={false} />);
     expect(screen.getByText('Team average')).toBeInTheDocument();
     expect(screen.getByLabelText(/quality score/i)).toBeInTheDocument();
   });
 
-  // @req REQ-4.6-2
+  // @req REQ-4.4.9-9
   it('displays correct score label based on score threshold', () => {
     render(<CodeQualityPanel data={[makeDev({ codeQuality: { score: 78, bugRatio: 0, criticalScore: 80, approvalScore: 75, prFocusScore: 82, reworkRate: 0.2 } })]} isLoading={false} />);
     expect(screen.getByText('Good')).toBeInTheDocument();
   });
 
-  // @req REQ-4.6-3
+  // @req REQ-4.4.9-1
   it('shows sub-scores for all four quality dimensions', () => {
     render(<CodeQualityPanel data={[makeDev()]} isLoading={false} />);
     expect(screen.getByText('Critical / Security')).toBeInTheDocument();
@@ -63,13 +63,13 @@ describe('CodeQualityPanel', () => {
     expect(screen.getByText('Low rework')).toBeInTheDocument();
   });
 
-  // @req REQ-4.6-3
+  // @req REQ-4.5-5
   it('does not render per-developer bar chart with single developer', () => {
     const { container } = render(<CodeQualityPanel data={[makeDev()]} isLoading={false} />);
     expect(container.querySelector('.cq-bars')).toBeNull();
   });
 
-  // @req REQ-4.6-3
+  // @req REQ-4.5-5
   it('renders per-developer bar chart with multiple developers', () => {
     const data = [makeDev(), makeDev({ developerId: 'bob', name: 'Bob', codeQuality: { score: 60, bugRatio: 0.1, criticalScore: 50, approvalScore: 60, prFocusScore: 70, reworkRate: 0.5 } })];
     const { container } = render(<CodeQualityPanel data={data} isLoading={false} />);

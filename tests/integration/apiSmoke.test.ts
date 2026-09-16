@@ -162,6 +162,7 @@ describe('API Smoke Tests', () => {
   });
 
   describe('GET /health', () => {
+    // @req REQ-4.10-3
     it('returns 200 with status ok', async () => {
       const res = await get('/health', false);
       expect(res.status).toBe(200);
@@ -179,7 +180,7 @@ describe('API Smoke Tests', () => {
   });
 
   describe('GET /api/dashboard/projects', () => {
-    // @req REQ-4.3-2
+    // @req REQ-4.3-1
     it('returns 200 with project keys array', async () => {
       const res = await get('/api/dashboard/projects');
       expect(res.status).toBe(200);
@@ -188,13 +189,13 @@ describe('API Smoke Tests', () => {
   });
 
   describe('POST /api/dashboard/metrics', () => {
-    // @req REQ-4.4-1
+    // @req REQ-4.7-3
     it('returns 400 when payload is missing required fields', async () => {
       const res = await post('/api/dashboard/metrics', {});
       expect(res.status).toBe(400);
     });
 
-    // @req REQ-4.4-1
+    // @req REQ-4.9-1
     it('returns 200 with valid payload', async () => {
       const res = await post('/api/dashboard/metrics', {
         developerIds: ['alice'],

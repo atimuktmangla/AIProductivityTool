@@ -204,6 +204,13 @@ A composite 0–100 score from four equal-weighted signals (25% each), derived e
 | Jira Category Allocation | Donut chart + horizontal bar chart with percentage breakdown                                             |
 | Team Contributors        | Sortable table with columns: commits, lines +/-, PRs reviewed, cycle time, pickup delay, review lifecycle, review depth, work type, quality score; sparklines and quality badge per row |
 
+<!-- REQ-4.5-1 --> The Team Contributors section renders one row per developer, labelled by developer name.
+<!-- REQ-4.5-2 --> Clicking a developer in the Team Contributors table selects that developer (drill-through).
+<!-- REQ-4.5-3 --> The Team Contributors table is sortable by column when a column header is clicked.
+<!-- REQ-4.5-4 --> The Team Contributors table offers a CSV export of the displayed rows.
+<!-- REQ-4.5-5 --> The Code Quality Score section renders per-developer score bars only when more than one developer is selected.
+<!-- REQ-4.5-6 --> A contributor row flags an oversized average PR (a review-focus signal) with an indicator icon.
+
 ### 4.6 Skeleton loading
 
 <!-- REQ-4.6-1 --> All metric sections display animated skeleton placeholders while `isLoading === true`, preventing layout shift.
@@ -223,6 +230,8 @@ A composite 0–100 score from four equal-weighted signals (25% each), derived e
 <!-- REQ-4.8.1-1 --> A background sync job pre-computes and caches metrics for a configured set of users on a repeating schedule. Once synced, dashboard queries load from per-developer cache files instantly without hitting Bitbucket or Jira APIs.
 
 #### 4.8.2 User selection modes
+
+<!-- REQ-4.8.2-1 --> The Sync Jobs tab offers three user-selection modes — All users, By project, and Select manually.
 
 The Sync Jobs tab offers three modes:
 
@@ -273,6 +282,7 @@ The Sync Jobs tab offers three modes:
 
 <!-- REQ-4.10-1 --> All outbound Bitbucket and Jira API calls MUST be bounded by `MAX_CONCURRENT_API_CALLS` (env var, default `50`). The same `concurrentMap` utility used for spec-metrics MUST be applied to all aggregator fan-out loops.
 <!-- REQ-4.10-2 --> When any upstream API responds with HTTP 429, the call MUST be retried up to 3 times with exponential backoff (initial 500 ms, multiplier 2, ±25% jitter). After all retries exhausted, the aggregator MUST surface `429 Too Many Requests` to the client with a `Retry-After: 60` header (see REQ-4.7-5).
+<!-- REQ-4.10-3 --> An unauthenticated `GET /health` liveness endpoint MUST return `200 OK` with body `{ "status": "ok" }`.
 
 ### 4.11 Clarifications
 

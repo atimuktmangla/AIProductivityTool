@@ -47,6 +47,7 @@ describe('errorHandler', () => {
     expect((res as any).body.error).toBe('Upstream server error');
   });
 
+  // @req REQ-4.7-2
   it('returns 502 for upstream unreachable (status 0)', () => {
     const err = new AtlassianHttpError(0, 'ECONNREFUSED', 'connection refused', 'http://bb/api');
     const res = mockRes();
@@ -55,6 +56,7 @@ describe('errorHandler', () => {
     expect((res as any).body.error).toBe('Upstream unreachable');
   });
 
+  // @req REQ-4.7-4
   it('returns 500 for generic unknown errors', () => {
     const err = new Error('something broke');
     const res = mockRes();

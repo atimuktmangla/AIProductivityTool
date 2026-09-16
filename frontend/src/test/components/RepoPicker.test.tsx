@@ -51,7 +51,7 @@ describe('RepoPicker', () => {
     expect(onProjectsChange).toHaveBeenCalledWith(['SS']);
   });
 
-  // @req REQ-4.3-2
+  // @req REQ-4.3-1
   it('shows tier indicator labels', async () => {
     render(<RepoPicker {...buildProps()} />);
     await waitFor(() => {
@@ -69,7 +69,7 @@ describe('RepoPicker', () => {
     });
   });
 
-  // @req REQ-4.3-2
+  // @req REQ-4.3-1
   it('shows repo list when projects are selected', async () => {
     render(<RepoPicker {...buildProps({ selectedProjects: ['SS'] })} />);
     await waitFor(() => {
