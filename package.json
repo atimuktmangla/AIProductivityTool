@@ -2,6 +2,7 @@
   "name": "ai-productivity-tool",
   "version": "1.0.0",
   "description": "Developer metrics backend for on-prem Jira Server and Bitbucket Server",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
